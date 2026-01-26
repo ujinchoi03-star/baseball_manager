@@ -1,27 +1,37 @@
-### 1. 방 생성 테스트
-POST http://localhost:8080/api/rooms
+### 1. 유저1 로그인
+POST http://localhost:8080/api/auth/login/google
 Content-Type: application/json
 
 {
-  "user_id": 1
+  "idToken": "user1_token"
 }
 
-### 2. 방 참가 테스트 (위에서 받은 match_id 입력)
-POST http://localhost:8080/api/rooms/join
+### 2. 유저2 로그인
+POST http://localhost:8080/api/auth/login/google
 Content-Type: application/json
 
 {
-  "match_id": "2D17F7",
-  "guest_id": 2
+  "idToken": "user2_token"
 }
 
-### 3. 선수 목록 조회
-GET http://localhost:8080/api/team/players
-
-### 4. 매칭 신청
+### 3. 유저1 매칭 신청
 POST http://localhost:8080/api/matchmaking
 Content-Type: application/json
 
 {
-  "userId": 1
+  "userId": 2
 }
+
+### 4. 유저2 매칭 신청
+POST http://localhost:8080/api/matchmaking
+Content-Type: application/json
+
+{
+  "userId": 3
+}
+
+### 5. 유저1 매칭 상태 확인
+GET http://localhost:8080/api/matchmaking/status?userId=2
+
+### 6. 유저2 매칭 상태 확인
+GET http://localhost:8080/api/matchmaking/status?userId=3

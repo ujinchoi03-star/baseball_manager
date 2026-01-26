@@ -41,11 +41,15 @@ class MatchMakingService(
     // 2. 매칭 시도 로직
     private fun tryMatch(myUserId: Long) {
         // 나 말고 기다리는 사람 있나?
-        val opponent = matchQueueRepository.findFirstByUserIdNotOrderByJoinedAtAsc(myUserId)
+        val allWaiting = matchQueueRepository.findAll()
+            .filter { it.userId != myUserId }
+            .sortedBy { it.joinedAt }
+
+        val opponent = allWaiting.firstOrNull()
 
         if (opponent != null) {
             // 🎉 매칭 성사!
-            val matchId = UUID.randomUUID().toString().substring(0, 8).uppercase() // 짧은 방 ID 생성
+            val matchId = UUID.randomUUID().toString().substring(0, 8).uppercase()
 
             // 방 생성 (DB 저장)
             val room = Room(matchId = matchId, hostId = opponent.userId, status = RoomStatus.PLAYING)
@@ -65,13 +69,24 @@ class MatchMakingService(
     // 3. 내 상태 확인 (폴링용)
     @Transactional(readOnly = true)
     fun checkStatus(userId: Long): Map<String, Any> {
-        // 1) 내가 방장으로 된 게임이 있나? (매칭 성공)
-        val myRoom = roomRepository.findByHostIdAndStatus(userId, RoomStatus.PLAYING)
-        if (myRoom != null) {
-            return mapOf("status" to "MATCHED", "matchId" to myRoom.matchId)
+        // 1) 내가 방장으로 된 게임이 있나?
+        val myRoomAsHost = roomRepository.findByHostIdAndStatus(userId, RoomStatus.PLAYING)
+        if (myRoomAsHost != null) {
+            return mapOf("status" to "MATCHED", "matchId" to myRoomAsHost.matchId)
         }
 
-        // 2) 아직 대기열에 있나?
+        // ⭐ 2) 내가 참여한 게임이 있나? (방장 아닌 경우)
+        val anyMatchedRoom = roomRepository.findAll()
+            .firstOrNull { it.status == RoomStatus.PLAYING }
+
+        if (anyMatchedRoom != null) {
+            // 대기열에도 없으면 이 방에 참여한 것
+            if (!matchQueueRepository.existsById(userId)) {
+                return mapOf("status" to "MATCHED", "matchId" to anyMatchedRoom.matchId)
+            }
+        }
+
+        // 3) 아직 대기열에 있나?
         if (matchQueueRepository.existsById(userId)) {
             return mapOf("status" to "SEARCHING")
         }
