@@ -1,20 +1,28 @@
-### 1. 유저1 로그인
+### 유저1 로그인
 POST http://localhost:8080/api/auth/login/google
 Content-Type: application/json
 
 {
-  "idToken": "user1_token"
+  "idToken": "testuser1"
 }
 
-### 2. 유저2 로그인
+### 유저2 로그인
 POST http://localhost:8080/api/auth/login/google
 Content-Type: application/json
 
 {
-  "idToken": "user2_token"
+  "idToken": "testuser2"
 }
 
-### 3. 유저1 매칭 신청
+### 유저1 매칭 신청
+POST http://localhost:8080/api/matchmaking
+Content-Type: application/json
+
+{
+  "userId": 1
+}
+
+### 유저2 매칭 신청
 POST http://localhost:8080/api/matchmaking
 Content-Type: application/json
 
@@ -22,16 +30,50 @@ Content-Type: application/json
   "userId": 2
 }
 
-### 4. 유저2 매칭 신청
-POST http://localhost:8080/api/matchmaking
+### 유저1 매칭 상태 확인
+GET http://localhost:8080/api/matchmaking/status?userId=1
+
+### 유저1 라인업 저장
+POST http://localhost:8080/api/team/lineup
 Content-Type: application/json
 
 {
-  "userId": 3
+  "match_id": "078C4605",
+  "user_id": 1,
+  "active_lineup": {
+    "starters": {
+      "P": 4,
+      "C": 10,
+      "1B": 2,
+      "2B": 6,
+      "3B": 9,
+      "SS": 1,
+      "LF": 3,
+      "CF": 7,
+      "RF": 5
+    },
+    "batting_order": [1, 7, 2, 8, 3, 6, 5, 9, 4]
+  }
 }
+### 유저2 라인업 저장
+POST http://localhost:8080/api/team/lineup
+Content-Type: application/json
 
-### 5. 유저1 매칭 상태 확인
-GET http://localhost:8080/api/matchmaking/status?userId=2
-
-### 6. 유저2 매칭 상태 확인
-GET http://localhost:8080/api/matchmaking/status?userId=3
+{
+  "match_id": "078C4605",
+  "user_id": 2,
+  "active_lineup": {
+    "starters": {
+      "P": 15,
+      "C": 19,
+      "1B": 18,
+      "2B": 21,
+      "3B": 14,
+      "SS": 27,
+      "LF": 17,
+      "CF": 20,
+      "RF": 22
+    },
+    "batting_order": [14, 15, 18, 25, 17, 22, 21, 20, 19]
+  }
+}

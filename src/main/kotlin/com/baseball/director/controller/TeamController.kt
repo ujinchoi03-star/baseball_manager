@@ -16,17 +16,32 @@ class TeamController(
     }
 
     @PostMapping("/lineup")
-    fun saveLineup(@RequestBody request: LineupRequest): Map<String, String> {
-        // ⭐ 서비스 호출!
-        teamService.saveLineup(request.matchId, request.activeLineup)
+    fun saveLineup(@RequestBody request: SaveLineupRequest): Map<String, String> {
+        val lineup = Lineup(
+            battingOrder = request.active_lineup.batting_order.toMutableList(),
+            starters = request.active_lineup.starters.toMutableMap()
+        )
 
-        println("📝 DB 저장 완료! MatchID: ${request.matchId}")
-        return mapOf("status" to "SUCCESS", "message" to "라인업이 DB에 저장되었습니다.")
+        teamService.saveLineup(request.match_id, lineup, request.user_id)  // ⭐ user_id 추가
+
+        return mapOf("status" to "SUCCESS", "match_id" to request.match_id)
+    }
+
+    @GetMapping("/lineup_check")
+    fun checkLineup(): Map<String, Any> {
+        return mapOf("status" to "OK", "total_credit" to 0)
     }
 }
 
-// DTO 수정: Map -> Lineup 클래스 직접 사용 (자동 변환됨)
-data class LineupRequest(
-    val matchId: String,
-    val activeLineup: Lineup
+data class SaveLineupRequest(
+    val match_id: String,
+    val user_id: Long,
+    val active_lineup: ActiveLineup
+)
+
+data class ActiveLineup(
+    val starters: Map<String, Long>,
+    val batting_order: List<Long>,
+    val bench: List<Long>? = null,
+    val bullpen: List<Long>? = null
 )

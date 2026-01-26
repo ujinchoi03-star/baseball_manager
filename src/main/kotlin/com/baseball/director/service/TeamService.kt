@@ -5,6 +5,7 @@ import com.baseball.director.domain.entity.MatchInfo
 import com.baseball.director.domain.repository.BatterRepository
 import com.baseball.director.domain.repository.MatchInfoRepository
 import com.baseball.director.domain.repository.PitcherRepository
+import com.baseball.director.domain.repository.RoomRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -12,8 +13,10 @@ import org.springframework.transaction.annotation.Transactional
 class TeamService(
     private val batterRepository: BatterRepository,
     private val pitcherRepository: PitcherRepository,
-    private val matchInfoRepository: MatchInfoRepository // ⭐ 추가됨!
+    private val matchInfoRepository: MatchInfoRepository,
+    private val RoomRepository: RoomRepository
 ) {
+
     @Transactional(readOnly = true)
     fun getAllPlayers(): Map<String, Any> {
         return mapOf(
@@ -22,18 +25,74 @@ class TeamService(
         )
     }
 
-    // ⭐ [NEW] 진짜 저장 로직
     @Transactional
-    fun saveLineup(matchId: String, lineup: Lineup) {
-        // 1. 이미 있는 방인지 확인 (없으면 새로 만듦)
+    fun saveLineup(matchId: String, lineup: Lineup, userId: Long) {  // ⭐ userId 파라미터 추가
+        val validationResult = validateLineup(lineup)
+        if (!validationResult.isValid) {
+            throw IllegalArgumentException(validationResult.message)
+        }
+
         val matchInfo = matchInfoRepository.findById(matchId)
             .orElseGet { MatchInfo(matchId = matchId) }
 
-        // 2. 일단 '홈팀' 라인업에 저장 (테스트용)
-        // 나중에는 유저 ID랑 비교해서 홈/어웨이 구분할 예정
-        matchInfo.homeLineup = lineup
+        // ⭐ userId로 home/away 판단
+        val room = RoomRepository.findById(matchId)
+            .orElseThrow { IllegalArgumentException("매칭 정보를 찾을 수 없습니다") }
 
-        // 3. DB에 저장!
+        if (room.hostId == userId) {
+            matchInfo.homeLineup = lineup
+            println("✅ Home 라인업 저장 완료 (userId: $userId)")
+        } else {
+            matchInfo.awayLineup = lineup
+            println("✅ Away 라인업 저장 완료 (userId: $userId)")
+        }
+
         matchInfoRepository.save(matchInfo)
     }
+
+    // ⭐ 라인업 검증 로직
+    private fun validateLineup(lineup: Lineup): ValidationResult {
+        // 1. 수비 위치 9개 체크
+        val requiredPositions = setOf("P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF")
+        val missingPositions = requiredPositions - lineup.starters.keys
+        if (missingPositions.isNotEmpty()) {
+            return ValidationResult(false, "빠진 수비 위치: $missingPositions")
+        }
+
+        // 2. 투수 확인
+        val pitcher = lineup.starters["P"]
+        if (pitcher == null) {
+            return ValidationResult(false, "투수가 없습니다")
+        }
+
+        // 3. 타순 9명 체크
+        if (lineup.battingOrder.size != 9) {
+            return ValidationResult(false, "타순은 9명이어야 합니다 (현재: ${lineup.battingOrder.size}명)")
+        }
+
+        // 4. 수비 위치 중복 체크
+        val uniqueFielders = lineup.starters.values.distinct()
+        if (uniqueFielders.size != lineup.starters.size) {
+            return ValidationResult(false, "수비 위치에 중복된 선수가 있습니다")
+        }
+
+        // 5. 타순 중복 체크
+        val uniqueBatters = lineup.battingOrder.distinct()
+        if (uniqueBatters.size != lineup.battingOrder.size) {
+            return ValidationResult(false, "타순에 중복된 선수가 있습니다")
+        }
+
+        // 6. 투수가 타순에 있는지 확인 (일반적으로 투수는 타순 마지막)
+        // KBO에서는 투수가 9번 타순인 경우가 많음
+        if (!lineup.battingOrder.contains(pitcher)) {
+            return ValidationResult(false, "투수가 타순에 없습니다")
+        }
+
+        return ValidationResult(true, "검증 성공")
+    }
 }
+
+data class ValidationResult(
+    val isValid: Boolean,
+    val message: String
+)
