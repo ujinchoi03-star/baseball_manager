@@ -27,10 +27,7 @@ class MatchMakingService(
             return "ALREADY_MATCHED"
         }
 
-        // 대기열에 이미 있으면 패스
-        if (matchQueueRepository.existsById(userId)) {
-            return "WAITING"
-        }
+        matchQueueRepository.deleteById(userId)
 
         // 대기열 등록
         matchQueueRepository.save(MatchQueue(userId = userId, rating = rating))

@@ -1,9 +1,20 @@
 package com.baseball.director.global.websocket
 
-// 유저가 보낼 메시지 (예: {"type": "PITCH", "matchId": "ROOM_123", "content": "FASTBALL"})
 data class GameMessage(
-    val type: String,   // "PITCH"(투구), "HIT"(타격), "Chat"(채팅) 등
+    val matchId: String,      // ⭐ 순서 변경
+    val senderId: Long,
+    val type: String,
+    val content: String? = null,  // ⭐ nullable로 변경
+    val inning: Int? = null,      // ⭐ 추가
+    val data: Map<String, Any>? = null  // ⭐ 추가
+)
+
+// ⭐ 새로 추가
+data class GameResponse(
+    val eventType: String,
     val matchId: String,
-    val senderId: Long, // 누가 보냈는지
-    val content: String // 구질, 타격 타이밍 등 데이터
+    val inning: Int,
+    val description: String,
+    val data: Map<String, Any>? = null,
+    val timestamp: Long = System.currentTimeMillis()
 )

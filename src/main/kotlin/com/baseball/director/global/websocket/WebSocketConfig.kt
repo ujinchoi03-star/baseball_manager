@@ -1,19 +1,21 @@
 package com.baseball.director.global.websocket
 
 import org.springframework.context.annotation.Configuration
-import org.springframework.web.socket.config.annotation.EnableWebSocket
-import org.springframework.web.socket.config.annotation.WebSocketConfigurer
-import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
+import org.springframework.messaging.simp.config.MessageBrokerRegistry
+import org.springframework.web.socket.config.annotation.*
 
 @Configuration
-@EnableWebSocket
-class WebSocketConfig(
-    private val gameHandler: GameHandler
-) : WebSocketConfigurer {
+@EnableWebSocketMessageBroker  // ⭐ 이거로 바꿈!
+class WebSocketConfig : WebSocketMessageBrokerConfigurer {  // ⭐ 상속 변경!
 
-    override fun registerWebSocketHandlers(registry: WebSocketHandlerRegistry) {
-        // "ws://localhost:8080/ws/game" 주소로 들어오면 gameHandler가 담당한다!
-        registry.addHandler(gameHandler, "/ws/game")
-            .setAllowedOrigins("*") // 모든 곳에서 접속 허용 (CORS 해결)
+    override fun registerStompEndpoints(registry: StompEndpointRegistry) {
+        registry.addEndpoint("/ws-baseball")  // ⭐ 엔드포인트 변경
+            .setAllowedOriginPatterns("*")
+            .withSockJS()  // ⭐ SockJS 지원
+    }
+
+    override fun configureMessageBroker(registry: MessageBrokerRegistry) {
+        registry.enableSimpleBroker("/topic")  // ⭐ 브로드캐스트 경로
+        registry.setApplicationDestinationPrefixes("/app")  // ⭐ 클라이언트→서버 경로
     }
 }

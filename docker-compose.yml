@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  # MySQL 데이터베이스
+  mysql:
+    image: mysql:8.0
+    container_name: baseball-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root1234
+      MYSQL_DATABASE: baseball_db
+      MYSQL_USER: baseball
+      MYSQL_PASSWORD: baseball1234
+    ports:
+      - "3307:3306"  # 로컬 MySQL과 충돌 방지 (3307로 변경)
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - baseball-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ubaseball", "-pbaseball1234"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Spring Boot 애플리케이션
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: baseball-app
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    networks:
+      - baseball-network
+    restart: on-failure
+
+volumes:
+  mysql-data:
+
+networks:
+  baseball-network:
+    driver: bridge

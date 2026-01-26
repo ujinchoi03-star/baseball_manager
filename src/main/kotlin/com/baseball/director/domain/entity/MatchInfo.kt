@@ -9,6 +9,8 @@ class MatchInfo(
     @Column(name = "match_id")
     val matchId: String,
 
+    var currentBatterIndex: Int? = 0,
+
     var inning: Int = 1,
 
     @Column(name = "is_top")
