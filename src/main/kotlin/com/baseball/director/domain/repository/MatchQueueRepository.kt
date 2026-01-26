@@ -2,8 +2,15 @@ package com.baseball.director.domain.repository
 
 import com.baseball.director.domain.entity.MatchQueue
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Query
 
 interface MatchQueueRepository : JpaRepository<MatchQueue, Long> {
-    // 나보다 먼저 온 사람 중, 가장 오래 기다린 사람 1명 찾기
-    fun findFirstByUserIdNotOrderByJoinedAtAsc(myUserId: Long): MatchQueue?
+
+    // ⭐ 커스텀 쿼리로 명확하게 작성
+    @Query("SELECT m FROM MatchQueue m WHERE m.userId != :userId ORDER BY m.joinedAt ASC LIMIT 1")
+    fun findFirstByUserIdNotOrderByJoinedAtAsc(userId: Long): MatchQueue?
+
+    // 또는 더 간단하게
+    @Query("SELECT m FROM MatchQueue m WHERE m.userId != :userId ORDER BY m.joinedAt ASC")
+    fun findFirstOpponent(userId: Long): List<MatchQueue>
 }
