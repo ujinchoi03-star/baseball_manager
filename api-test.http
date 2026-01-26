@@ -1,0 +1,58 @@
+### 1. 구글 로그인 테스트 (회원가입 & 로그인)
+POST http://localhost:8080/api/auth/login/google
+Content-Type: application/json
+
+{
+  "idToken": "fake_token_12345"
+}
+
+### 2. 전체 선수 목록 조회 (드래프트용)
+GET http://localhost:8080/api/team/players
+Content-Type: application/json
+
+### 3. 내 라인업 저장하기 (테스트)
+POST http://localhost:8080/api/team/lineup
+Content-Type: application/json
+
+{
+  "matchId": "ROOM_123",
+  "activeLineup": {
+    "starters": {
+      "P": 1,
+      "C": 2,
+      "1B": 3,
+      "2B": 4,
+      "3B": 5,
+      "SS": 6,
+      "LF": 7,
+      "CF": 8,
+      "RF": 9,
+      "DH": 10
+    },
+    "battingOrder": [9, 8, 7, 4, 3, 5, 6, 2, 10],
+    "bench": [11, 12, 13],
+    "bullpen": [20, 21]
+  }
+}
+
+### 4. [유저 1] 매칭 신청 (줄 서기)
+POST http://localhost:8080/api/matchmaking
+Content-Type: application/json
+
+{ "userId": 1 }
+
+### 5. [유저 1] 상태 확인 -> "SEARCHING"이 떠야 함
+GET http://localhost:8080/api/matchmaking/status?userId=1
+
+
+### 6. [유저 2] 매칭 신청 (이 순간 매칭 성사!)
+POST http://localhost:8080/api/matchmaking
+Content-Type: application/json
+
+{ "userId": 2 }
+
+### 7. [유저 1] 다시 상태 확인 -> "MATCHED"와 "matchId"가 떠야 함! 🎉
+GET http://localhost:8080/api/matchmaking/status?userId=1
+
+### 8. 웹소켓 연결 테스트
+WEBSOCKET ws://localhost:8080/ws/game
