@@ -51,30 +51,17 @@ class RoomController(
 
     @PostMapping("/join")
     fun joinRoom(@RequestBody request: JoinRoomRequest): Map<String, Any> {
-
         val room = roomRepository.findById(request.match_id)
-            .orElseThrow {
-                IllegalArgumentException("존재하지 않는 방입니다: ${request.match_id}")
-            }
+            .orElseThrow { IllegalArgumentException("방을 찾을 수 없습니다") }
 
-        if (room.status == RoomStatus.PLAYING) {
-            throw IllegalStateException("이미 진행 중인 게임입니다")
-        }
-
-        if (room.hostId == request.guest_id) {
-            throw IllegalStateException("자신이 만든 방에는 참가할 수 없습니다")
-        }
-
+        // ⭐ guestId 설정
+        room.guestId = request.guest_id
         room.status = RoomStatus.PLAYING
         roomRepository.save(room)
 
-        println("🚪 방 참가: ${request.match_id} (게스트: ${request.guest_id})")
-
         return mapOf(
             "match_id" to room.matchId,
-            "status" to "PLAYING",
-            "host_id" to room.hostId,
-            "guest_id" to request.guest_id
+            "status" to room.status.name
         )
     }
 

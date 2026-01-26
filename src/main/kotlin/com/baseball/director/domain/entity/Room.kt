@@ -12,6 +12,9 @@ class Room(
     @Column(name = "host_id")
     val hostId: Long, // 방장 ID
 
+    @Column(name = "guest_id")  // ⭐ 추가
+    var guestId: Long? = null,  // ⭐ 추가 (nullable, 아직 참가 안 했을 수 있음)
+
     @Enumerated(EnumType.STRING)
     var status: RoomStatus = RoomStatus.WAITING
 )
