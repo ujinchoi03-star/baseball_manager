@@ -28,6 +28,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: baseball-app
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
     depends_on:
       mysql:
         condition: service_healthy
