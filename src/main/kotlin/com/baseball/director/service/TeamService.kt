@@ -14,7 +14,7 @@ class TeamService(
     private val batterRepository: BatterRepository,
     private val pitcherRepository: PitcherRepository,
     private val matchInfoRepository: MatchInfoRepository,
-    private val RoomRepository: RoomRepository
+    private val roomRepository: RoomRepository
 ) {
 
     @Transactional(readOnly = true)
@@ -36,7 +36,7 @@ class TeamService(
             .orElseGet { MatchInfo(matchId = matchId) }
 
         // ⭐ userId로 home/away 판단
-        val room = RoomRepository.findById(matchId)
+        val room = roomRepository.findById(matchId)
             .orElseThrow { IllegalArgumentException("매칭 정보를 찾을 수 없습니다") }
 
         if (room.hostId == userId) {
