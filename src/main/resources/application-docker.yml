@@ -1,7 +1,7 @@
 spring:
   datasource:
     url: jdbc:mysql://mysql:3306/baseball_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
-    username: root
+    username: baseball_user  # ⭐ 변경
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
@@ -13,3 +13,9 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.MySQLDialect
+    defer-datasource-initialization: true
+
+  sql:
+    init:
+      mode: always
+      data-locations: classpath:data.sql

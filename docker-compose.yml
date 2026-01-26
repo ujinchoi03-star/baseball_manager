@@ -1,13 +1,14 @@
 version: '3.8'
-
 services:
-  # MySQL 데이터베이스
   mysql:
     image: mysql:8.0
     container_name: baseball-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}  # root 비밀번호
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: baseball_db
+      # Docker 내부용 사용자 추가
+      MYSQL_USER: baseball_user          # ⭐ 추가
+      MYSQL_PASSWORD: ${DB_PASSWORD}     # ⭐ 추가
     ports:
       - "3307:3306"
     volumes:
@@ -20,7 +21,6 @@ services:
       timeout: 5s
       retries: 10
 
-  # Spring Boot 애플리케이션
   app:
     build:
       context: .
