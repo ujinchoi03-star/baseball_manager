@@ -255,6 +255,7 @@ class GamePlayService(
             resultMessage += "\n🔄 3아웃 공수교대! (${matchInfo.inning}회 ${if (matchInfo.isTop) "초" else "말"})"
             val newLineup = if (matchInfo.isTop) matchInfo.awayLineup else matchInfo.homeLineup
             matchInfo.currentBatterIndex = newLineup.currentOrder
+            checkGameEnd(matchInfo)
         }
 
         matchInfoRepository.save(matchInfo)
@@ -296,6 +297,41 @@ class GamePlayService(
 
         matchRecordRepository.save(record)
         println("📝 MATCH_RECORD 저장: ${batter.name} - ${playResult.detail}")
+    }
+
+    // ⭐ [개선] 게임 종료 체크
+    private fun checkGameEnd(matchInfo: MatchInfo): Boolean {
+        // 9회말 종료 후 체크
+        if (matchInfo.inning >= 9 && matchInfo.isTop) {
+            val homeScore = matchInfo.score.home
+            val awayScore = matchInfo.score.away
+
+            // 동점이 아니면 게임 종료
+            if (homeScore != awayScore) {
+                matchInfo.status = "FINISHED"
+
+                // Room 상태도 업데이트
+                val room = roomRepository.findById(matchInfo.matchId).orElseThrow()
+                room.status = com.baseball.director.domain.entity.RoomStatus.FINISHED
+                roomRepository.save(room)
+
+                println("🏁 게임 종료! 최종 스코어 - Home: $homeScore, Away: $awayScore")
+                return true
+            }
+        }
+
+        // 12회 종료 (최대 연장)
+        if (matchInfo.inning > 12) {
+            matchInfo.status = "FINISHED"
+            val room = roomRepository.findById(matchInfo.matchId).orElseThrow()
+            room.status = com.baseball.director.domain.entity.RoomStatus.FINISHED
+            roomRepository.save(room)
+
+            println("🏁 게임 종료! 12회 무승부")
+            return true
+        }
+
+        return false
     }
 }
 

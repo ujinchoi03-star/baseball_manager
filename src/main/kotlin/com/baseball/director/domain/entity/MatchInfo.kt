@@ -16,6 +16,10 @@ class MatchInfo(
     @Column(name = "is_top")
     var isTop: Boolean = true,
 
+    // ⭐ 이 필드가 있나요?
+    @Column(name = "status")
+    var status: String = "READY",  // READY, PLAYING, FINISHED
+
     // --- JSON 데이터들 ---
 
     @Convert(converter = ScoreConverter::class)
