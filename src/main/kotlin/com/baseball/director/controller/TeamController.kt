@@ -2,6 +2,7 @@ package com.baseball.director.controller
 
 import com.baseball.director.domain.entity.Lineup
 import com.baseball.director.service.TeamService
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
 @RestController
@@ -16,37 +17,54 @@ class TeamController(
     }
 
     @PostMapping("/lineup")
-    fun saveLineup(@RequestBody request: SaveLineupRequest): Map<String, String> {
+    fun saveLineup(@RequestBody request: SaveLineupRequest): ResponseEntity<Map<String, String>> {
+        // DTO -> Entity 변환
         val lineup = Lineup(
             battingOrder = request.active_lineup.batting_order.toMutableList(),
-            starters = request.active_lineup.starters.toMutableMap()
+            starters = request.active_lineup.starters.toMutableMap(),
+            bench = request.active_lineup.bench?.toMutableList() ?: mutableListOf(),
+            bullpen = request.active_lineup.bullpen?.toMutableList() ?: mutableListOf()
         )
 
-        teamService.saveLineup(request.match_id, lineup, request.user_id)  // ⭐ user_id 추가
+        return try {
+            // 서비스 호출 (급여 검증 포함)
+            teamService.saveLineup(request.match_id, lineup, request.user_id)
+            ResponseEntity.ok(mapOf("status" to "SUCCESS", "match_id" to request.match_id))
+        } catch (e: IllegalArgumentException) {
+            // 검증 실패 시 400 Bad Request 리턴
+            ResponseEntity.badRequest().body(mapOf("status" to "FAIL", "message" to (e.message ?: "오류 발생")))
+        }
+    }
 
-        return mapOf("status" to "SUCCESS", "match_id" to request.match_id)
+    // ⭐ [수정] 현재 라인업의 급여 합계 확인 API
+    @PostMapping("/lineup_check")
+    fun checkLineup(@RequestBody request: SaveLineupRequest): Map<String, Any> {
+        val lineup = Lineup(
+            battingOrder = request.active_lineup.batting_order.toMutableList(),
+            starters = request.active_lineup.starters.toMutableMap(),
+            bench = request.active_lineup.bench?.toMutableList() ?: mutableListOf(),
+            bullpen = request.active_lineup.bullpen?.toMutableList() ?: mutableListOf()
+        )
+
+        // 현재 구성된 라인업의 총 급여 계산
+        val totalCredit = teamService.calculateLineupCredit(lineup)
+
+        return mapOf(
+            "status" to "OK",
+            "total_credit" to totalCredit,
+            "limit" to 200,
+            "is_valid" to (totalCredit <= 200)
+        )
     }
 
     @PostMapping("/match_setup")
     fun confirmMatchSetup(@RequestBody request: MatchSetupRequest): Map<String, Any> {
-
-        // TODO: 나중에 TeamService에 createMatchSetup(request) 같은 함수를 만들어서 DB에 저장해야 함.
-        // 지금은 API 연결 확인을 위해 더미 응답만 반환합니다.
-        println("🏟️ 경기 설정 확정: Match(${request.match_id}), Stadium(${request.stadium_id}), Home(${request.is_home})")
-
-        return mapOf(
-            "status" to "READY",
-            "match_id" to request.match_id
-        )
+        println("🏟️ 경기 설정 확정: Match(${request.match_id}), Stadium(${request.stadium_id})")
+        return mapOf("status" to "READY", "match_id" to request.match_id)
     }
 }
 
-    @GetMapping("/lineup_check")
-    fun checkLineup(): Map<String, Any> {
-        return mapOf("status" to "OK", "total_credit" to 0)
-    }
-
-
+// --- DTO ---
 data class SaveLineupRequest(
     val match_id: String,
     val user_id: Long,
@@ -63,6 +81,6 @@ data class ActiveLineup(
 data class MatchSetupRequest(
     val match_id: String,
     val user_id: Long,
-    val stadium_id: Long,  // 구장 ID
-    val is_home: Boolean   // true면 홈팀(후공), false면 원정팀(선공) 등 규칙에 따름
+    val stadium_id: Long,
+    val is_home: Boolean
 )

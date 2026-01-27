@@ -1,15 +1,26 @@
 spring:
   datasource:
-    # MySQL 접속 설정 (로컬 포트 3306, DB 이름은 baseball_db)
     url: jdbc:mysql://localhost:3306/baseball_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
     username: root
-    password:  ${DB_PASSWORD} # <-- 환경 변수 MySQL 비밀번호를 사용!
+    password: ${DB_PASSWORD} # 환경 변수: DB_PASSWORD
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
     hibernate:
-      ddl-auto: update  # 시작 할 때, Entity 기반으로 DB 테이블을 자동 생성
-    show-sql: true      # 실행된 SQL 쿼리 로그 출력
+      ddl-auto: update
+    show-sql: true
     properties:
       hibernate:
-        format_sql: true # SQL 로그 예쁘게 줄바꿈 처리
+        format_sql: true
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            # 👇 "dummy" 대신, 님이 설정한 실제 환경 변수 이름을 적습니다.
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope:
+              - profile
+              - email
