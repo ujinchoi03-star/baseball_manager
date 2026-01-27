@@ -10,22 +10,32 @@ import kotlin.random.Random
 @Service
 class BaseRunningService {
 
-    // ⭐ [수정] tactic 파라미터 추가!
     fun processPlay(state: InningState, result: PlayResult, batter: Batter, tactic: String = "NORMAL") {
 
         state.scoreLog.clear()
 
         when (result.type) {
-            PlayType.OUT, PlayType.STRIKEOUT -> state.outCount++
+            PlayType.OUT -> {
+                state.outCount++
+                // ⭐ [추가] 아웃이지만 '외야 뜬공'이면 희생플라이 체크!
+                if (state.outCount < 3) { // 3아웃이면 체크할 필요 없음
+                    checkSacrificeFly(state, result, batter, tactic)
+                }
+            }
+            PlayType.STRIKEOUT -> state.outCount++
+
             PlayType.STEAL_SUCCESS -> advanceStealRunner(state)
+
             PlayType.STEAL_FAIL -> {
                 state.outCount++
                 removeFailedRunner(state)
             }
+
             PlayType.SACRIFICE -> {
                 state.outCount++
                 pushRunnersOneBase(state)
             }
+
             PlayType.GDP -> {
                 state.outCount += 2
                 state.firstBase = null
@@ -34,9 +44,11 @@ class BaseRunningService {
                     state.secondBase = null
                 }
             }
-            PlayType.ERROR -> advanceRunners(state, 1, batter, tactic) // ⭐ tactic 전달
+
+            PlayType.ERROR -> advanceRunners(state, 1, batter, tactic)
             PlayType.WALK, PlayType.HIT_BY_PITCH -> pushRunners(state, batter)
-            PlayType.HIT -> advanceRunners(state, result.hitType, batter, tactic) // ⭐ tactic 전달
+            PlayType.HIT -> advanceRunners(state, result.hitType, batter, tactic)
+
             PlayType.HOMERUN -> {
                 scoreRunner(state, state.thirdBase)
                 scoreRunner(state, state.secondBase)
@@ -49,55 +61,144 @@ class BaseRunningService {
         }
     }
 
-    // --- [핵심] 안타 시 주루 플레이 (전술 반영) ---
+    // =================================================================
+    // 🕊️ [로직] 희생플라이 (Tag-up) 처리
+    // =================================================================
+    private fun checkSacrificeFly(state: InningState, result: PlayResult, batter: Batter, tactic: String) {
+        // 1. 외야 뜬공인지 확인 (detail 문자열 분석)
+        // 예: "중견수 뜬공 아웃" -> O, "유격수 뜬공 아웃" -> X, "좌익수 땅볼 아웃"(보살) -> X
+        val detail = result.detail
+        val isOutfield = detail.contains("좌익수") || detail.contains("중견수") || detail.contains("우익수")
+        val isFlyBall = detail.contains("뜬공")
+
+        if (!isOutfield || !isFlyBall) return // 내야 뜬공이나 땅볼이면 리턴
+
+        // 2. 3루 주자 태그업 시도 (홈 쇄도)
+        state.thirdBase?.let { runner ->
+            val outcome = attemptTagUp(runner, batter, "HOME", tactic)
+            when (outcome) {
+                RunResult.SUCCESS -> {
+                    scoreRunner(state, runner) // 득점!
+                    state.thirdBase = null
+                    state.scoreLog.add("🕊️ ${runner.name}, 희생플라이로 득점 성공!")
+                }
+                RunResult.OUT -> {
+                    state.outCount++
+                    state.thirdBase = null
+                    state.scoreLog.add("🚨 ${runner.name}, 태그업 후 홈에서 횡사! (더블플레이)")
+                }
+                RunResult.HOLD -> {
+                    // 뛰지 않음 (그대로 3루)
+                }
+            }
+        }
+
+        // 3. 2루 주자 태그업 시도 (3루 진루) - 아웃카운트가 늘어나서 3아웃이 되었는지 체크 필요
+        if (state.outCount < 3) {
+            state.secondBase?.let { runner ->
+                // 3루가 비어있어야 뜀
+                if (state.thirdBase == null) {
+                    val outcome = attemptTagUp(runner, batter, "3RD", tactic)
+                    when (outcome) {
+                        RunResult.SUCCESS -> {
+                            state.thirdBase = runner
+                            state.secondBase = null
+                            state.scoreLog.add("🏃 ${runner.name}, 과감한 태그업으로 3루 안착!")
+                        }
+                        RunResult.OUT -> {
+                            state.outCount++
+                            state.secondBase = null
+                            state.scoreLog.add("🚨 ${runner.name}, 3루 가다가 아웃!")
+                        }
+                        RunResult.HOLD -> {} // 대기
+                    }
+                }
+            }
+        }
+    }
+
+    // [Helper] 태그업 성공 여부 판정
+    private fun attemptTagUp(runner: Batter, batter: Batter, targetBase: String, tactic: String): RunResult {
+        // 1. 기본 확률 = 주자의 발
+        var successProb = runner.runSpeed.toDouble()
+
+        // 2. 타자의 희생플라이(sf) 능력 반영
+        // sf가 높을수록 타구를 멀리 보냈을 확률이 높음 (개당 2% 보너스)
+        successProb += (batter.sf * 2.0)
+
+        // 3. 거리 랜덤 변수 (외야수가 얼마나 깊은 곳에서 잡았나)
+        // 0(아주 얕음) ~ 40(워닝트랙) 점수 추가
+        val deepBonus = Random.nextInt(0, 40)
+        successProb += deepBonus
+
+        // 4. 난이도 페널티
+        val penalty = if (targetBase == "HOME") 50 else 30 // 홈 승부가 더 어려움
+        successProb -= penalty
+
+        // 확률 보정 (0 ~ 100)
+        successProb = successProb.coerceIn(5.0, 95.0)
+
+        // 5. 뛸지 말지 결정 (Decision Threshold)
+        // NORMAL: 70% 이상이어야 뜀 (안전주의)
+        // AGGRESSIVE: 40%만 돼도 뜀 (공격주의)
+        val threshold = if (tactic == "AGGRESSIVE_RUNNING") 40.0 else 70.0
+
+        if (successProb < threshold) {
+            return RunResult.HOLD
+        }
+
+        // 6. 결과 판정
+        val dice = Random.nextDouble(0.0, 100.0)
+        return if (dice < successProb) {
+            RunResult.SUCCESS
+        } else {
+            RunResult.OUT
+        }
+    }
+
+    // =================================================================
+    // 👇 아래는 기존 로직 (안타 시 진루, 도루 등) - 그대로 유지
+    // =================================================================
+
     private fun advanceRunners(state: InningState, hitType: Int, batter: Batter, tactic: String) {
         val runner3 = state.thirdBase
         val runner2 = state.secondBase
         val runner1 = state.firstBase
 
-        // 베이스 초기화
         state.thirdBase = null
         state.secondBase = null
         state.firstBase = null
 
-        // 1. 3루 주자 (무조건 득점)
         scoreRunner(state, runner3)
 
-        // 2. 2루 주자 처리
         if (runner2 != null) {
             when (hitType) {
                 1 -> {
-                    // [상황: 1루타 때 2루 주자가 홈까지?]
-                    // tactic에 따라 뛸지 말지 결정 + 결과(성공/아웃/멈춤) 리턴
                     val result = attemptExtraAdvance(runner2, "HOME_ON_SINGLE", state.outCount, tactic)
                     when (result) {
                         RunResult.SUCCESS -> {
                             scoreRunner(state, runner2)
-                            state.scoreLog.add("⚡ ${runner2.name}, 2루에서 홈까지 과감한 주루 성공!")
+                            state.scoreLog.add("⚡ ${runner2.name}, 2루에서 홈까지 주루 성공!")
                         }
                         RunResult.OUT -> {
                             state.outCount++
                             state.scoreLog.add("🚨 ${runner2.name}, 홈 쇄도하다 태그 아웃!")
                         }
-                        RunResult.HOLD -> {
-                            state.thirdBase = runner2 // 3루에서 멈춤
-                        }
+                        RunResult.HOLD -> state.thirdBase = runner2
                     }
                 }
-                else -> scoreRunner(state, runner2) // 2루타 이상은 여유있게 득점
+                else -> scoreRunner(state, runner2)
             }
         }
 
-        // 3. 1루 주자 처리
         if (runner1 != null) {
             when (hitType) {
                 1 -> {
-                    // [상황: 1루타 때 1루 주자가 3루까지?]
                     val result = attemptExtraAdvance(runner1, "3RD_ON_SINGLE", state.outCount, tactic)
                     when (result) {
                         RunResult.SUCCESS -> {
                             state.thirdBase = runner1
-                            state.scoreLog.add("⚡ ${runner1.name}, 1루타에 3루까지 전력 질주!")
+                            state.scoreLog.add("⚡ ${runner1.name}, 1루타에 3루까지!")
                         }
                         RunResult.OUT -> {
                             state.outCount++
@@ -107,12 +208,11 @@ class BaseRunningService {
                     }
                 }
                 2 -> {
-                    // [상황: 2루타 때 1루 주자가 홈까지?]
                     val result = attemptExtraAdvance(runner1, "HOME_ON_DOUBLE", state.outCount, tactic)
                     when (result) {
                         RunResult.SUCCESS -> {
                             scoreRunner(state, runner1)
-                            state.scoreLog.add("⚡ ${runner1.name}, 2루타에 홈까지 쇄도 성공!")
+                            state.scoreLog.add("⚡ ${runner1.name}, 2루타에 홈까지!")
                         }
                         RunResult.OUT -> {
                             state.outCount++
@@ -125,8 +225,6 @@ class BaseRunningService {
             }
         }
 
-        // 4. 타자 주자 배치 (아웃 카운트가 늘어나서 이닝이 끝났는지 체크 필요하지만, 일단 배치)
-        // (단, 3아웃이면 점수/주자 모두 무효화되므로 GamePlayService에서 처리됨)
         if (state.outCount < 3) {
             when (hitType) {
                 1 -> state.firstBase = batter
@@ -136,46 +234,27 @@ class BaseRunningService {
         }
     }
 
-    // --- [Helper] 추가 진루 시도 판정 로직 (Risk vs Reward) ---
     private enum class RunResult { SUCCESS, OUT, HOLD }
 
     private fun attemptExtraAdvance(runner: Batter, scenario: String, outCount: Int, tactic: String): RunResult {
-        // 1. 성공 확률 계산 (선수 능력치 기반)
         var successProb = runner.runSpeed
-
         val penalty = when (scenario) {
-            "3RD_ON_SINGLE" -> 20  // 1루->3루 (중간 난이도)
-            "HOME_ON_SINGLE" -> 45 // 2루->홈 (어려움)
-            "HOME_ON_DOUBLE" -> 30 // 1루->홈 (할만함)
+            "3RD_ON_SINGLE" -> 20
+            "HOME_ON_SINGLE" -> 45
+            "HOME_ON_DOUBLE" -> 30
             else -> 0
         }
         successProb -= penalty
-
-        // 2아웃이면 자동 출발하므로 확률 보정
         if (outCount == 2) successProb += 10
-
-        // 확률 범위 보정 (최소 5%, 최대 95%)
         successProb = successProb.coerceIn(5, 95)
 
-        // 2. ⭐ [핵심] 뛸지 말지 결정 (Threshold)
-        // 적극적 주루(AGGRESSIVE_RUNNING)면 30%만 돼도 뜀, 보통은 60% 넘어야 뜀
         val threshold = if (tactic == "AGGRESSIVE_RUNNING") 40 else 70
+        if (successProb < threshold) return RunResult.HOLD
 
-        // 확률이 기준치보다 낮으면 -> 안전하게 멈춤 (HOLD)
-        if (successProb < threshold) {
-            return RunResult.HOLD
-        }
-
-        // 3. 뛰기로 결정함! -> 주사위 굴리기 (성공 vs 아웃)
         val dice = Random.nextInt(0, 100)
-        return if (dice < successProb) {
-            RunResult.SUCCESS // 세이프!
-        } else {
-            RunResult.OUT     // 아웃! (적극성의 대가)
-        }
+        return if (dice < successProb) RunResult.SUCCESS else RunResult.OUT
     }
 
-    // --- 기존 로직 유지 ---
     private fun advanceStealRunner(state: InningState) {
         if (state.thirdBase != null) { scoreRunner(state, state.thirdBase); state.thirdBase = null }
         else if (state.secondBase != null) { state.thirdBase = state.secondBase; state.secondBase = null }
@@ -208,7 +287,7 @@ class BaseRunningService {
     private fun scoreRunner(state: InningState, runner: Batter?) {
         runner?.let {
             state.currentScore += 1
-            state.scoreLog.add("${it.name} 득점!")
+            // state.scoreLog.add("${it.name} 득점!") // (중복 로그 방지 위해 여기서 로그는 뺄 수도 있음, 상황 봐서 조정)
         }
     }
 }
