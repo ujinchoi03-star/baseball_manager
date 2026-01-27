@@ -1,45 +1,55 @@
 package com.baseball.director.controller
 
+import com.baseball.director.domain.entity.Lineup
+import com.baseball.director.domain.entity.Score
 import com.baseball.director.domain.repository.MatchInfoRepository
-import com.baseball.director.domain.repository.RoomRepository
-import com.baseball.director.service.TeamService
-import org.springframework.web.bind.annotation.*
+import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RestController
 
 @RestController
 @RequestMapping("/api/simul")
 class SimulationController(
-    // ⭐ 여기가 핵심입니다! 이 부분(생성자)에 리포지토리들이 있어야 밑에서 쓸 수 있습니다.
-    private val roomRepository: RoomRepository,
-    private val matchInfoRepository: MatchInfoRepository,
-    private val teamService: TeamService
+    private val matchInfoRepository: MatchInfoRepository
 ) {
 
     @GetMapping("/{matchId}/init")
-    fun loadGameData(@PathVariable matchId: String): Map<String, Any> {
+    fun loadGameData(@PathVariable matchId: String): ResponseEntity<GameInitResponse> {
 
-        // 1. 방 정보 조회
-        val room = roomRepository.findById(matchId)
-            .orElseThrow { IllegalArgumentException("존재하지 않는 방입니다: $matchId") }
+        // 1. 경기 정보 가져오기
+        val matchInfo = matchInfoRepository.findById(matchId)
+            .orElseThrow { IllegalArgumentException("존재하지 않는 경기입니다: $matchId") }
 
-        // 2. 게스트 확인
-        val guestId = room.guestId ?: throw IllegalStateException("게스트가 아직 입장하지 않았습니다.")
+        // 2. 응답 데이터 구성
+        val response = GameInitResponse(
+            match_id = matchInfo.matchId, // 👈 [수정] id -> matchId 로 변경! (!!도 필요 없음)
+            inning = matchInfo.inning,
+            is_top = matchInfo.isTop,
+            score = matchInfo.score,
 
-        // 3. 라인업 가져오기 (TeamService에 getLineup이 있어야 빨간줄이 안 뜹니다)
-        val homeLineup = teamService.getLineup(matchId, room.hostId)
-        val awayLineup = teamService.getLineup(matchId, guestId)
+            // 양 팀 라인업 전달
+            home_lineup = matchInfo.homeLineup,
+            away_lineup = matchInfo.awayLineup,
 
-        // 4. 매치 정보 (구장 등)
-        //val matchInfo = matchInfoRepository.findById(matchId).orElse(null)
-        val stadiumId = 1L
-
-        println("🎮 게임 데이터 로딩 완료: $matchId")
-
-        return mapOf(
-            "match_id" to matchId,
-            "stadium" to mapOf("id" to stadiumId, "weather" to "CLEAR"),
-            "home_team" to mapOf("user_id" to room.hostId, "role" to "HOME", "lineup" to homeLineup),
-            "away_team" to mapOf("user_id" to guestId, "role" to "AWAY", "lineup" to awayLineup),
-            "current_status" to room.status.name
+            // 볼카운트 & 주자 정보
+            ball_count = matchInfo.ballCount,
+            runners = matchInfo.runners.runnerIds
         )
+
+        return ResponseEntity.ok(response)
     }
 }
+
+// 📦 응답용 DTO
+data class GameInitResponse(
+    val match_id: String,
+    val inning: Int,
+    val is_top: Boolean,
+    val score: Score,
+    val home_lineup: Lineup,
+    val away_lineup: Lineup,
+    val ball_count: com.baseball.director.domain.entity.BallCount,
+    val runners: List<Long?>
+)

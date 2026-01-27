@@ -3,7 +3,7 @@ package com.baseball.director.domain.game
 enum class PlayType {
     STRIKEOUT, WALK, HIT_BY_PITCH, // 삼진, 볼넷, 사구
     HOMERUN, HIT, // 홈런, 안타
-    OUT, ERROR, GDP // 범타, 실책
+    OUT, ERROR, GDP,SACRIFICE,STEAL_SUCCESS,STEAL_FAIL
 }
 
 data class PlayResult(
