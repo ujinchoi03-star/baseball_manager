@@ -10,7 +10,7 @@ services:
       - "3307:3306"
     volumes:
       - mysql-data:/var/lib/mysql
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql  # ⭐ 추가
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - baseball-network
     healthcheck:
@@ -27,6 +27,9 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - DB_PASSWORD=${DB_PASSWORD}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}          # ⭐ 추가!
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}  # ⭐ 추가!
+      - JWT_SECRET=${JWT_SECRET}                      # ⭐ 추가!
     depends_on:
       mysql:
         condition: service_healthy

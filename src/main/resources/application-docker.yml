@@ -5,9 +5,20 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope:
+              - email
+              - profile
+
   jpa:
     hibernate:
-      ddl-auto: update  # ⭐ validate → update 변경
+      ddl-auto: update
     show-sql: true
     properties:
       hibernate:
@@ -18,3 +29,7 @@ spring:
   sql:
     init:
       mode: never
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: 86400000  # 24시간

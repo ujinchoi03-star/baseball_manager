@@ -21,39 +21,30 @@ repositories {
 }
 
 dependencies {
-	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-	implementation("org.springframework.boot:spring-boot-starter-web")
-	implementation("org.springframework.boot:spring-boot-starter-websocket")
-	implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
-	implementation("org.jetbrains.kotlin:kotlin-reflect")
-	runtimeOnly("com.mysql:mysql-connector-j")
-	testImplementation("org.springframework.boot:spring-boot-starter-test")
-	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
-	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-	testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
-	testImplementation("org.springframework.boot:spring-boot-starter-test")
-
 	// 1. Web & WebSocket
 	implementation("org.springframework.boot:spring-boot-starter-web")
 	implementation("org.springframework.boot:spring-boot-starter-websocket")
 
-	// 2. Database (JPA + MySQL/MariaDB)
+	// 2. Database (JPA + MySQL)
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-	runtimeOnly("com.mysql:mysql-connector-j") // 또는 mariadb
+	runtimeOnly("com.mysql:mysql-connector-j")
 
 	// 3. JSON 처리 (Kotlin용)
 	implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+	implementation("org.jetbrains.kotlin:kotlin-reflect")
 
-	// 4. JWT (로그인 구현용)
-	implementation("io.jsonwebtoken:jjwt-api:0.11.5")
-	runtimeOnly("io.jsonwebtoken:jjwt-impl:0.11.5")
-	runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.11.5")
+	// 4. JWT (로그인 구현용) ⭐ 버전 업데이트
+	implementation("io.jsonwebtoken:jjwt-api:0.12.3")
+	runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.3")
+	runtimeOnly("io.jsonwebtoken:jjwt-gson:0.12.3")
 
-	// 5. Google IdToken 검증 (구글 로그인용)
+	// 5. Google OAuth (구글 로그인용)
 	implementation("com.google.api-client:google-api-client:2.2.0")
 
-	// 6. 테스트 & 롬복 등
+	// 6. 테스트
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
+	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 kotlin {
