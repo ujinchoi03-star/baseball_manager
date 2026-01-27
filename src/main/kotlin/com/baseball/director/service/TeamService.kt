@@ -26,7 +26,7 @@ class TeamService(
     }
 
     @Transactional
-    fun saveLineup(matchId: String, lineup: Lineup, userId: Long) {  // ⭐ userId 파라미터 추가
+    fun saveLineup(matchId: String, lineup: Lineup, userId: Long) {
         val validationResult = validateLineup(lineup)
         if (!validationResult.isValid) {
             throw IllegalArgumentException(validationResult.message)
@@ -35,7 +35,6 @@ class TeamService(
         val matchInfo = matchInfoRepository.findById(matchId)
             .orElseGet { MatchInfo(matchId = matchId) }
 
-        // ⭐ userId로 home/away 판단
         val room = roomRepository.findById(matchId)
             .orElseThrow { IllegalArgumentException("매칭 정보를 찾을 수 없습니다") }
 
@@ -50,10 +49,9 @@ class TeamService(
         matchInfoRepository.save(matchInfo)
     }
 
-    // ⭐ 라인업 검증 로직
     private fun validateLineup(lineup: Lineup): ValidationResult {
-        // 1. 수비 위치 9개 체크
-        val requiredPositions = setOf("P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF")
+        // 1. 수비 위치 10개 체크 (야수 8명 + DH 1명 + 투수 1명)
+        val requiredPositions = setOf("P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH")
         val missingPositions = requiredPositions - lineup.starters.keys
         if (missingPositions.isNotEmpty()) {
             return ValidationResult(false, "빠진 수비 위치: $missingPositions")
@@ -65,27 +63,45 @@ class TeamService(
             return ValidationResult(false, "투수가 없습니다")
         }
 
-        // 3. 타순 9명 체크
+        // 3. 지명타자 확인
+        val dh = lineup.starters["DH"]
+        if (dh == null) {
+            return ValidationResult(false, "지명타자(DH)가 없습니다")
+        }
+
+        // 4. 타순 9명 체크 (투수는 타순에 없음, DH가 대신 타석에 섬)
         if (lineup.battingOrder.size != 9) {
             return ValidationResult(false, "타순은 9명이어야 합니다 (현재: ${lineup.battingOrder.size}명)")
         }
 
-        // 4. 수비 위치 중복 체크
-        val uniqueFielders = lineup.starters.values.distinct()
-        if (uniqueFielders.size != lineup.starters.size) {
+        // 5. 투수는 타순에 없어야 함
+        if (lineup.battingOrder.contains(pitcher)) {
+            return ValidationResult(false, "투수는 타순에 포함되면 안 됩니다 (DH가 대신 타석)")
+        }
+
+        // 6. DH는 타순에 있어야 함
+        if (!lineup.battingOrder.contains(dh)) {
+            return ValidationResult(false, "지명타자(DH)는 타순에 포함되어야 합니다")
+        }
+
+        // 7. 수비 위치 중복 체크 (투수와 DH 제외한 나머지)
+        val fielders = lineup.starters.filterKeys { it != "P" && it != "DH" }.values
+        val uniqueFielders = fielders.distinct()
+        if (uniqueFielders.size != fielders.size) {
             return ValidationResult(false, "수비 위치에 중복된 선수가 있습니다")
         }
 
-        // 5. 타순 중복 체크
+        // 8. 타순 중복 체크
         val uniqueBatters = lineup.battingOrder.distinct()
         if (uniqueBatters.size != lineup.battingOrder.size) {
             return ValidationResult(false, "타순에 중복된 선수가 있습니다")
         }
 
-        // 6. 투수가 타순에 있는지 확인 (일반적으로 투수는 타순 마지막)
-        // KBO에서는 투수가 9번 타순인 경우가 많음
-        if (!lineup.battingOrder.contains(pitcher)) {
-            return ValidationResult(false, "투수가 타순에 없습니다")
+        // 9. 타순의 모든 선수가 수비 위치에 있는지 확인 (DH 포함)
+        val allPlayers = lineup.starters.values.toSet()
+        val invalidBatters = lineup.battingOrder.filterNot { it in allPlayers }
+        if (invalidBatters.isNotEmpty()) {
+            return ValidationResult(false, "타순에 수비 위치가 없는 선수가 있습니다: $invalidBatters")
         }
 
         return ValidationResult(true, "검증 성공")
