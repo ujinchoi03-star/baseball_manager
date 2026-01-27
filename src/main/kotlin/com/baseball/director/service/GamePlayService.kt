@@ -4,11 +4,13 @@ import com.baseball.director.domain.entity.MatchInfo
 import com.baseball.director.domain.game.InningState
 import com.baseball.director.domain.repository.BatterRepository
 import com.baseball.director.domain.repository.MatchInfoRepository
+import com.baseball.director.domain.repository.MatchRecordRepository
 import com.baseball.director.domain.repository.PitcherRepository
 import com.baseball.director.domain.repository.RoomRepository
 import com.baseball.director.global.websocket.GameMessage
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 
 @Service
 class GamePlayService(
@@ -17,9 +19,10 @@ class GamePlayService(
     private val batterRepository: BatterRepository,
     private val pitcherRepository: PitcherRepository,
     private val gameEngineService: GameEngineService,
-    private val baseRunningService: BaseRunningService
+    private val baseRunningService: BaseRunningService,
+    private val matchRecordRepository: MatchRecordRepository
 ) {
-
+    private val objectMapper = jacksonObjectMapper()
     /**
      * 웹소켓 요청을 분기 처리하는 메인 메서드
      */
@@ -213,7 +216,14 @@ class GamePlayService(
         )
 
         // 7. 주루 플레이 처리 (AGGRESSIVE_RUNNING 여부는 tactic으로 전달됨)
+        val scoreBefore = state.currentScore  // ⭐ 추가
         baseRunningService.processPlay(state, playResult, batter, tactic)
+        val scoreAfter = state.currentScore   // ⭐ 추가
+        val scoreChange = scoreAfter - scoreBefore  // ⭐ 추가
+
+        // ⭐ [추가] MATCH_RECORD에 저장
+        saveMatchRecord(matchInfo, playResult, batter, scoreChange)
+
 
         // 8. 결과 반영
         matchInfo.ballCount.o = state.outCount
@@ -259,4 +269,35 @@ class GamePlayService(
         matchInfo.isTop = !matchInfo.isTop
         if (matchInfo.isTop) matchInfo.inning++
     }
+
+    // ⭐ [새 메서드] MATCH_RECORD 저장
+    private fun saveMatchRecord(
+        matchInfo: MatchInfo,
+        playResult: com.baseball.director.domain.game.PlayResult,
+        batter: com.baseball.director.domain.entity.Batter,
+        scoreChange: Int
+    ) {
+        val data = mapOf(
+            "batter_id" to (batter.id ?: 0L),
+            "result" to playResult.type.name,
+            "detail" to playResult.detail,
+            "hit_type" to playResult.hitType,
+            "score_change" to scoreChange
+        )
+
+        val record = com.baseball.director.domain.entity.MatchRecord(
+            matchId = matchInfo.matchId,
+            inning = matchInfo.inning,
+            eventType = "AT_BAT",
+            data = objectMapper.writeValueAsString(data),
+            actorId = batter.id,
+            description = playResult.detail
+        )
+
+        matchRecordRepository.save(record)
+        println("📝 MATCH_RECORD 저장: ${batter.name} - ${playResult.detail}")
+    }
 }
+
+
+

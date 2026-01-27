@@ -1,3 +1,6 @@
+SET NAMES utf8mb4;
+SET CHARACTER SET utf8mb4;
+
 -- 1. 사용자 생성
 CREATE USER IF NOT EXISTS 'baseball_user'@'%' IDENTIFIED BY 'ChldnwlswkdwJddn1';
 GRANT ALL PRIVILEGES ON baseball_db.* TO 'baseball_user'@'%';

@@ -6,6 +6,8 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: baseball_db
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4  # ⭐ 추가
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci  # ⭐ 추가
     ports:
       - "3307:3306"
     volumes:
