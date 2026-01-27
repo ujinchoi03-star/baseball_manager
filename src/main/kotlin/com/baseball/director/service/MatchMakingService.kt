@@ -77,6 +77,7 @@ class MatchMakingService(
             matchType = "FRIEND"
         )
         roomRepository.save(room)
+        matchInfoRepository.save(MatchInfo(matchId = matchId)) // ⭐ 추가
 
         println("✅ 친구 초대 방 생성: $matchId, 코드: $inviteCode")
 

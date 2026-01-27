@@ -24,5 +24,6 @@ data class Lineup(
     var battingOrder: MutableList<Long> = mutableListOf(),
     var bench: MutableList<Long> = mutableListOf(),
     var bullpen: MutableList<Long> = mutableListOf(),
-    var currentOrder: Int = 0
+    var currentOrder: Int = 0,
+    var hasDH: Boolean = true
 )
