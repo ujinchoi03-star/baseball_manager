@@ -15,30 +15,24 @@ class MatchMakingService(
     private val matchInfoRepository: MatchInfoRepository
 ) {
 
-    // 1. 매칭 신청 (줄 서기)
+    // 1. 랜덤 매칭 신청
     @Transactional
     fun joinQueue(userId: Long, rating: Int): String {
-        // 이미 진행 중인 게임이 있는지 확인 (Host인 경우)
-        val existingRoom = roomRepository.findByHostIdAndStatus(userId, RoomStatus.PLAYING)
+        val existingRoom = roomRepository.findActiveRoom(userId, RoomStatus.PLAYING)
         if (existingRoom != null) {
             return "ALREADY_MATCHED"
         }
 
-        // (Guest인 경우도 체크해주면 더 완벽함 - 생략 가능)
-
-        // 기존 대기열 제거 후 재등록
         matchQueueRepository.deleteById(userId)
         matchQueueRepository.save(MatchQueue(userId = userId, rating = rating))
 
-        // ⭐ 즉시 매칭 시도!
         tryMatch(userId)
 
         return "QUEUED"
     }
 
-    // 2. 매칭 시도 로직
+    // 2. 매칭 시도 (랜덤)
     private fun tryMatch(myUserId: Long) {
-        // 나 말고 기다리는 사람 찾기 (가장 오래 기다린 사람)
         val allWaiting = matchQueueRepository.findAll()
             .filter { it.userId != myUserId }
             .sortedBy { it.joinedAt }
@@ -46,49 +40,106 @@ class MatchMakingService(
         val opponent = allWaiting.firstOrNull()
 
         if (opponent != null) {
-            // 🎉 매칭 성사!
             val matchId = UUID.randomUUID().toString().substring(0, 8).uppercase()
 
-            // ⭐ [중요 수정] Host와 Guest를 둘 다 명시해야 함!
             val room = Room(
                 matchId = matchId,
-                hostId = opponent.userId, // 먼저 기다린 사람이 방장
-                guestId = myUserId,       // 내가 게스트
-                status = RoomStatus.PLAYING // 바로 게임 시작 상태
+                hostId = opponent.userId,
+                guestId = myUserId,
+                status = RoomStatus.PLAYING,
+                matchType = "RANDOM"  // ⭐ String
             )
             roomRepository.save(room)
 
-            // 게임 정보 초기화
             matchInfoRepository.save(MatchInfo(matchId = matchId))
 
-            // 두 명 다 대기열에서 제거
             matchQueueRepository.deleteById(myUserId)
             matchQueueRepository.deleteById(opponent.userId)
 
-            println("🎉 매칭 성공! 방 ID: $matchId (Host: ${opponent.userId} vs Guest: $myUserId)")
+            println("🎉 랜덤 매칭 성공! $matchId")
         }
     }
 
-    // 3. 내 상태 확인 (폴링용)
+    // 3. 친구 초대 방 생성
+    @Transactional
+    fun createFriendRoom(userId: Long): FriendRoomResponse {
+        val inviteCode = generateInviteCode()
+        val matchId = UUID.randomUUID().toString().substring(0, 8).uppercase()
+
+        val room = Room(
+            matchId = matchId,
+            hostId = userId,
+            guestId = null,
+            status = RoomStatus.WAITING,
+            inviteCode = inviteCode,
+            matchType = "FRIEND"  // ⭐ String
+        )
+        roomRepository.save(room)
+
+        println("✅ 친구 초대 방 생성: $matchId, 코드: $inviteCode")
+
+        return FriendRoomResponse(
+            matchId = matchId,
+            inviteCode = inviteCode
+        )
+    }
+
+    // 4. 초대 코드로 입장
+    @Transactional
+    fun joinWithInviteCode(userId: Long, inviteCode: String): JoinRoomResponse {
+        val room = roomRepository.findByInviteCode(inviteCode)
+            ?: throw IllegalArgumentException("유효하지 않은 초대 코드입니다")
+
+        if (room.status != RoomStatus.WAITING) {
+            throw IllegalStateException("이미 게임이 시작된 방입니다")
+        }
+
+        if (room.hostId == userId) {
+            throw IllegalArgumentException("자신의 방에는 입장할 수 없습니다")
+        }
+
+        room.guestId = userId
+        room.status = RoomStatus.PLAYING
+        roomRepository.save(room)
+
+        matchInfoRepository.save(MatchInfo(matchId = room.matchId))
+
+        println("✅ 친구 초대 매칭 완료: ${room.matchId}")
+
+        return JoinRoomResponse(
+            matchId = room.matchId,
+            hostId = room.hostId,
+            guestId = userId
+        )
+    }
+
+    // 초대 코드 생성
+    private fun generateInviteCode(): String {
+        val chars = ('A'..'Z') + ('0'..'9')
+        var code: String
+        do {
+            code = (1..6).map { chars.random() }.joinToString("")
+        } while (roomRepository.findByInviteCode(code) != null)
+        return code
+    }
+
+    // 5. 내 상태 확인
     @Transactional(readOnly = true)
     fun checkStatus(userId: Long): Map<String, Any> {
-        // 1) 내가 방장(Host)인 게임이 있나?
-        val myRoomAsHost = roomRepository.findByHostIdAndStatus(userId, RoomStatus.PLAYING)
-        if (myRoomAsHost != null) {
-            return mapOf("status" to "MATCHED", "matchId" to myRoomAsHost.matchId)
+        val activeRoom = roomRepository.findActiveRoom(userId, RoomStatus.PLAYING)
+        if (activeRoom != null) {
+            return mapOf("status" to "MATCHED", "matchId" to activeRoom.matchId)
         }
 
-        // ⭐ 2) 내가 게스트(Guest)인 게임이 있나? (이 로직이 빠져 있었음)
-        // (RoomRepository에 findByGuestIdAndStatus가 없으면 findAll로 필터링)
-        val myRoomAsGuest = roomRepository.findAll().find {
-            it.guestId == userId && it.status == RoomStatus.PLAYING
+        val waitingRoom = roomRepository.findByHostIdAndStatus(userId, RoomStatus.WAITING)
+        if (waitingRoom != null && waitingRoom.matchType == "FRIEND") {
+            return mapOf(
+                "status" to "WAITING_FRIEND",
+                "matchId" to waitingRoom.matchId,
+                "inviteCode" to (waitingRoom.inviteCode ?: "")
+            )
         }
 
-        if (myRoomAsGuest != null) {
-            return mapOf("status" to "MATCHED", "matchId" to myRoomAsGuest.matchId)
-        }
-
-        // 3) 아직 대기열에 있나?
         if (matchQueueRepository.existsById(userId)) {
             return mapOf("status" to "SEARCHING")
         }
@@ -96,9 +147,26 @@ class MatchMakingService(
         return mapOf("status" to "NONE")
     }
 
-    // 4. 매칭 취소
+    // 6. 매칭 취소
     @Transactional
     fun cancelQueue(userId: Long) {
         matchQueueRepository.deleteById(userId)
+
+        val waitingRoom = roomRepository.findByHostIdAndStatus(userId, RoomStatus.WAITING)
+        if (waitingRoom != null && waitingRoom.matchType == "FRIEND") {
+            roomRepository.delete(waitingRoom)
+            println("✅ 친구 초대 방 삭제: ${waitingRoom.matchId}")
+        }
     }
 }
+
+data class FriendRoomResponse(
+    val matchId: String,
+    val inviteCode: String
+)
+
+data class JoinRoomResponse(
+    val matchId: String,
+    val hostId: Long,
+    val guestId: Long
+)
