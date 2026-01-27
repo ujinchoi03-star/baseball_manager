@@ -2,7 +2,11 @@ package com.baseball.director.controller
 
 import com.baseball.director.domain.entity.Lineup
 import com.baseball.director.domain.entity.Score
+import com.baseball.director.domain.entity.Batter
+import com.baseball.director.domain.entity.Pitcher
 import com.baseball.director.domain.repository.MatchInfoRepository
+import com.baseball.director.domain.repository.BatterRepository
+import com.baseball.director.domain.repository.PitcherRepository
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -12,7 +16,9 @@ import org.springframework.web.bind.annotation.RestController
 @RestController
 @RequestMapping("/api/simul")
 class SimulationController(
-    private val matchInfoRepository: MatchInfoRepository
+    private val matchInfoRepository: MatchInfoRepository,
+    private val batterRepository: BatterRepository,
+    private val pitcherRepository: PitcherRepository
 ) {
 
     @GetMapping("/{matchId}/init")
@@ -28,17 +34,45 @@ class SimulationController(
             inning = matchInfo.inning,
             is_top = matchInfo.isTop,
             score = matchInfo.score,
-
-            // 양 팀 라인업 전달
-            home_lineup = matchInfo.homeLineup,
-            away_lineup = matchInfo.awayLineup,
-
-            // 볼카운트 & 주자 정보
+            home_lineup = convertToFullLineup(matchInfo.homeLineup),
+            away_lineup = convertToFullLineup(matchInfo.awayLineup),
             ball_count = matchInfo.ballCount,
-            runners = matchInfo.runners.runnerIds
+            runners = matchInfo.runners.runnerIds.map { id ->
+                id?.let { batterRepository.findById(it).orElse(null) }
+            }
         )
 
         return ResponseEntity.ok(response)
+    }
+
+    private fun convertToFullLineup(lineup: Lineup): FullLineupResponse {
+        val starters = lineup.starters.mapValues { (pos, id) ->
+            if (pos == "P") {
+                pitcherRepository.findById(id).orElse(null)
+            } else {
+                batterRepository.findById(id).orElse(null)
+            }
+        }
+
+        val battingOrder = lineup.battingOrder.map { id ->
+            batterRepository.findById(id).orElse(null)
+        }
+
+        val bench = lineup.bench.map { id ->
+            batterRepository.findById(id).orElse(null)
+        }
+
+        val bullpen = lineup.bullpen.map { id ->
+            pitcherRepository.findById(id).orElse(null)
+        }
+
+        return FullLineupResponse(
+            starters = starters,
+            batting_order = battingOrder,
+            bench = bench,
+            bullpen = bullpen,
+            hasDH = lineup.hasDH
+        )
     }
 }
 
@@ -48,8 +82,16 @@ data class GameInitResponse(
     val inning: Int,
     val is_top: Boolean,
     val score: Score,
-    val home_lineup: Lineup,
-    val away_lineup: Lineup,
+    val home_lineup: FullLineupResponse,
+    val away_lineup: FullLineupResponse,
     val ball_count: com.baseball.director.domain.entity.BallCount,
-    val runners: List<Long?>
+    val runners: List<Batter?>
+)
+
+data class FullLineupResponse(
+    val starters: Map<String, Any?>,
+    val batting_order: List<Batter?>,
+    val bench: List<Batter?>,
+    val bullpen: List<Pitcher?>,
+    val hasDH: Boolean
 )
