@@ -23,5 +23,6 @@ data class Lineup(
     var starters: MutableMap<String, Long> = mutableMapOf(),
     var battingOrder: MutableList<Long> = mutableListOf(),
     var bench: MutableList<Long> = mutableListOf(),
-    var bullpen: MutableList<Long> = mutableListOf()
+    var bullpen: MutableList<Long> = mutableListOf(),
+    var currentOrder: Int = 0
 )

@@ -106,7 +106,24 @@ class TeamService(
 
         return ValidationResult(true, "검증 성공")
     }
+    @Transactional(readOnly = true)
+    fun getLineup(matchId: String, userId: Long): Lineup {
+        val room = roomRepository.findById(matchId)
+            .orElseThrow { IllegalArgumentException("방을 찾을 수 없습니다") }
+
+        val matchInfo = matchInfoRepository.findById(matchId)
+            .orElseThrow { IllegalArgumentException("매치 정보를 찾을 수 없습니다") }
+
+        // ⭐ 수정됨: MatchInfo에서 Lineup이 null이 아니므로 바로 반환
+        return if (userId == room.hostId) {
+            matchInfo.homeLineup
+        } else {
+            matchInfo.awayLineup
+        }
+    }
 }
+
+
 
 data class ValidationResult(
     val isValid: Boolean,
