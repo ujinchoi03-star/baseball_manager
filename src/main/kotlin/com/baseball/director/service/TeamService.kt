@@ -104,6 +104,31 @@ class TeamService(
             return ValidationResult(false, "타순에 수비 위치가 없는 선수가 있습니다: $invalidBatters")
         }
 
+        // [추가] 10. 벤치 멤버 수 확인 (5명)
+        if (lineup.bench.size != 5) {
+            return ValidationResult(false, "벤치 멤버는 정확히 5명이어야 합니다. (현재: ${lineup.bench.size}명)")
+        }
+
+        // [추가] 11. 불펜 투수 수 확인 (6명)
+        if (lineup.bullpen.size != 6) {
+            return ValidationResult(false, "불펜 투수(마무리 포함)는 정확히 6명이어야 합니다. (현재: ${lineup.bullpen.size}명)")
+        }
+
+        // [추가] 12. 벤치/불펜 중복 체크 (선발이랑 겹치는지, 자기들끼리 겹치는지)
+        val allStarters = lineup.starters.values.toSet()
+        val allBench = lineup.bench.toSet()
+        val allBullpen = lineup.bullpen.toSet()
+
+        // 벤치에 중복 선수가 있거나, 선발과 겹치는지
+        if (allBench.size != 5 || allBench.any { it in allStarters }) {
+            return ValidationResult(false, "벤치에 중복된 선수가 있거나 선발 선수와 겹칩니다.")
+        }
+
+        // 불펜에 중복 선수가 있거나, 선발과 겹치는지
+        if (allBullpen.size != 6 || allBullpen.any { it in allStarters }) {
+            return ValidationResult(false, "불펜에 중복된 선수가 있거나 선발 선수와 겹칩니다.")
+        }
+
         return ValidationResult(true, "검증 성공")
     }
     @Transactional(readOnly = true)

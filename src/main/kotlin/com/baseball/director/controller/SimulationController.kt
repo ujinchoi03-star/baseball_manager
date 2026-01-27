@@ -29,7 +29,7 @@ class SimulationController(
         val awayLineup = teamService.getLineup(matchId, guestId)
 
         // 4. 매치 정보 (구장 등)
-        val matchInfo = matchInfoRepository.findById(matchId).orElse(null)
+        //val matchInfo = matchInfoRepository.findById(matchId).orElse(null)
         val stadiumId = 1L
 
         println("🎮 게임 데이터 로딩 완료: $matchId")
