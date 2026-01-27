@@ -4,6 +4,7 @@ import com.baseball.director.domain.entity.*
 import com.baseball.director.domain.repository.MatchInfoRepository
 import com.baseball.director.domain.repository.MatchQueueRepository
 import com.baseball.director.domain.repository.RoomRepository
+import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
@@ -12,7 +13,8 @@ import java.util.UUID
 class MatchMakingService(
     private val matchQueueRepository: MatchQueueRepository,
     private val roomRepository: RoomRepository,
-    private val matchInfoRepository: MatchInfoRepository
+    private val matchInfoRepository: MatchInfoRepository,
+    private val messagingTemplate: SimpMessagingTemplate
 ) {
 
     // 1. 랜덤 매칭 신청
@@ -47,7 +49,7 @@ class MatchMakingService(
                 hostId = opponent.userId,
                 guestId = myUserId,
                 status = RoomStatus.PLAYING,
-                matchType = "RANDOM"  // ⭐ String
+                matchType = "RANDOM"
             )
             roomRepository.save(room)
 
@@ -72,7 +74,7 @@ class MatchMakingService(
             guestId = null,
             status = RoomStatus.WAITING,
             inviteCode = inviteCode,
-            matchType = "FRIEND"  // ⭐ String
+            matchType = "FRIEND"
         )
         roomRepository.save(room)
 
@@ -87,29 +89,52 @@ class MatchMakingService(
     // 4. 초대 코드로 입장
     @Transactional
     fun joinWithInviteCode(userId: Long, inviteCode: String): JoinRoomResponse {
+        // 1. 방 찾기 - Kotlin 네이티브 방식
         val room = roomRepository.findByInviteCode(inviteCode)
             ?: throw IllegalArgumentException("유효하지 않은 초대 코드입니다")
 
-        if (room.status != RoomStatus.WAITING) {
+        // 2. 이미 게스트가 있는지 확인
+        if (room.guestId != null) {
             throw IllegalStateException("이미 게임이 시작된 방입니다")
         }
 
-        if (room.hostId == userId) {
-            throw IllegalArgumentException("자신의 방에는 입장할 수 없습니다")
-        }
-
+        // 3. 게스트 설정 및 상태 변경
         room.guestId = userId
         room.status = RoomStatus.PLAYING
         roomRepository.save(room)
 
-        matchInfoRepository.save(MatchInfo(matchId = room.matchId))
+        // 4. MatchInfo 조회 및 라인업 초기화
+        val matchInfo = matchInfoRepository.findById(room.matchId).orElse(null)
+            ?: throw IllegalArgumentException("MatchInfo를 찾을 수 없습니다")
 
-        println("✅ 친구 초대 매칭 완료: ${room.matchId}")
+        if (matchInfo.awayLineup.starters.isEmpty()) {
+            matchInfo.awayLineup = Lineup()
+        }
+        matchInfoRepository.save(matchInfo)
+
+        println("✅ 게스트 참가 완료: ${room.matchId}, hostId=${room.hostId}, guestId=${room.guestId}")
+
+        // 5. WebSocket으로 Host에게 알림 전송
+        try {
+            messagingTemplate.convertAndSend(
+                "/topic/room/${room.matchId}",
+                mapOf(
+                    "type" to "GUEST_JOINED",
+                    "match_id" to room.matchId,
+                    "host_id" to room.hostId,
+                    "guest_id" to room.guestId,
+                    "status" to "PLAYING"
+                )
+            )
+            println("📨 WebSocket 알림 전송: Host(${room.hostId})에게 게스트 참가 알림")
+        } catch (e: Exception) {
+            println("⚠️ WebSocket 알림 실패: ${e.message}")
+        }
 
         return JoinRoomResponse(
             matchId = room.matchId,
             hostId = room.hostId,
-            guestId = userId
+            guestId = room.guestId!!
         )
     }
 
