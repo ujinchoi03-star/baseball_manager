@@ -2,13 +2,15 @@ package com.baseball.director.service
 
 import com.baseball.director.domain.repository.MatchInfoRepository
 import com.baseball.director.domain.repository.RoomRepository
+import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 @Service
 class GameSetupService(
     private val matchInfoRepository: MatchInfoRepository,
-    private val roomRepository: RoomRepository
+    private val roomRepository: RoomRepository,
+    private val messagingTemplate: SimpMessagingTemplate  // ⭐ 추가
 ) {
 
     // 라인업 확정
@@ -20,7 +22,6 @@ class GameSetupService(
         val room = roomRepository.findById(matchId).orElse(null)
             ?: throw IllegalArgumentException("방을 찾을 수 없습니다")
 
-        // 홈팀인지 원정팀인지 판단
         val isHome = (userId == room.hostId)
 
         if (isHome) {
@@ -35,12 +36,45 @@ class GameSetupService(
 
         println("✅ 라인업 확정: matchId=$matchId, userId=$userId, isHome=$isHome, both=$bothConfirmed")
 
+        // ⭐ 양쪽 모두 확정되면 게임 시작!
+        if (bothConfirmed) {
+            matchInfo.status = "PLAYING"
+            matchInfoRepository.save(matchInfo)
+
+            // 게임 시작 메시지 전송
+            try {
+                messagingTemplate.convertAndSend(
+                    "/topic/match/$matchId",
+                    mapOf(
+                        "eventType" to "GAME_START",
+                        "matchId" to matchId,
+                        "inning" to 1,
+                        "description" to "⚾ 게임 시작! 1회 초",
+                        "data" to mapOf(
+                            "inning" to 1,
+                            "is_top" to true,
+                            "home_team_id" to matchInfo.homeTeamId,
+                            "away_team_id" to matchInfo.awayTeamId,
+                            "score" to mapOf(
+                                "home" to 0,
+                                "away" to 0
+                            )
+                        ),
+                        "timestamp" to System.currentTimeMillis()
+                    )
+                )
+                println("🎮 게임 시작 메시지 전송 완료!")
+            } catch (e: Exception) {
+                println("⚠️ 게임 시작 메시지 전송 실패: ${e.message}")
+            }
+        }
+
         return mapOf(
             "home_confirmed" to matchInfo.homeLineupConfirmed,
             "away_confirmed" to matchInfo.awayLineupConfirmed,
             "both_confirmed" to bothConfirmed,
-            "home_team_id" to (matchInfo.homeTeamId ?: 0L),  // ⭐ 추가
-            "away_team_id" to (matchInfo.awayTeamId ?: 0L)   // ⭐ 추가
+            "home_team_id" to (matchInfo.homeTeamId ?: 0L),
+            "away_team_id" to (matchInfo.awayTeamId ?: 0L)
         )
     }
 
@@ -50,7 +84,6 @@ class GameSetupService(
         val matchInfo = matchInfoRepository.findById(matchId).orElse(null)
             ?: throw IllegalArgumentException("매치를 찾을 수 없습니다")
 
-        // 라인업 확정만 체크 (homeTeamId, awayTeamId는 이미 자동 설정됨)
         val ready = matchInfo.homeLineupConfirmed &&
                 matchInfo.awayLineupConfirmed
 

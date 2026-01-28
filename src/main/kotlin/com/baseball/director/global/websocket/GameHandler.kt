@@ -1,5 +1,6 @@
 package com.baseball.director.global.websocket
 
+import com.baseball.director.domain.repository.MatchInfoRepository
 import com.baseball.director.service.GamePlayService
 import com.baseball.director.service.GameSetupService
 import org.springframework.messaging.handler.annotation.*
@@ -11,7 +12,8 @@ class GameHandler(
     private val gamePlayService: GamePlayService,
     private val gameSetupService: GameSetupService,
     // matchInfoRepository는 Service가 데이터를 가져오므로 여기선 제거해도 됩니다!
-    private val messagingTemplate: SimpMessageSendingOperations
+    private val messagingTemplate: SimpMessageSendingOperations,
+    private val matchInfoRepository: MatchInfoRepository
 ) {
 
     // [메인] 게임 진행 (타격, 작전, 교체 등)
@@ -133,6 +135,66 @@ class GameHandler(
                 inning = 0,
                 description = "설정 오류: ${e.message}",
                 data = mapOf("error" to (e.message ?: "알 수 없는 오류")),
+                timestamp = System.currentTimeMillis()
+            )
+        }
+    }
+
+    // [새로 추가] 게임 화면 진입 시 호출
+    @MessageMapping("/match/{matchId}/enter")
+    @SendTo("/topic/match/{matchId}")
+    fun handleGameEnter(
+        @DestinationVariable matchId: String,
+        @Payload message: GameMessage
+    ): GameResponse {
+
+        println("🎮 [${matchId}] 게임 화면 진입: user=${message.senderId}")
+
+        return try {
+            val matchInfo = matchInfoRepository.findById(matchId).orElseThrow()
+
+            // 게임 상태 확인
+            val bothReady = matchInfo.homeLineupConfirmed && matchInfo.awayLineupConfirmed
+
+            if (bothReady && matchInfo.status == "PLAYING") {
+                // 게임 시작 메시지 전송
+                GameResponse(
+                    eventType = "GAME_START",
+                    matchId = matchId,
+                    inning = matchInfo.inning,
+                    description = "⚾ 게임 시작! ${matchInfo.inning}회 ${if (matchInfo.isTop) "초" else "말"}",
+                    data = mapOf(
+                        "inning" to matchInfo.inning,
+                        "is_top" to matchInfo.isTop,
+                        "home_team_id" to (matchInfo.homeTeamId ?: 0L),  // ⭐ 0L로 기본값
+                        "away_team_id" to (matchInfo.awayTeamId ?: 0L),  // ⭐ 0L로 기본값
+                        "score" to mapOf(
+                            "home" to matchInfo.score.home,
+                            "away" to matchInfo.score.away
+                        )
+                    ),
+                    timestamp = System.currentTimeMillis()
+                )
+            } else {
+                GameResponse(
+                    eventType = "WAITING",
+                    matchId = matchId,
+                    inning = 0,
+                    description = "상대방 대기 중...",
+                    data = emptyMap(),
+                    timestamp = System.currentTimeMillis()
+                )
+            }
+
+        } catch (e: Exception) {
+            println("❌ [${matchId}] 진입 에러: ${e.message}")
+
+            GameResponse(
+                eventType = "ERROR",
+                matchId = matchId,
+                inning = 0,
+                description = "오류: ${e.message}",
+                data = emptyMap(),
                 timestamp = System.currentTimeMillis()
             )
         }
