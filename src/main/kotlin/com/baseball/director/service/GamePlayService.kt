@@ -27,39 +27,30 @@ class GamePlayService(
      * 웹소켓 요청을 분기 처리하는 메인 메서드
      */
     @Transactional
-    fun handleAction(message: GameMessage): String {
-        // 1. 경기 정보 가져오기
+    fun handleAction(message: GameMessage): GameActionResult { // ⭐ 변경
         val matchInfo = matchInfoRepository.findById(message.matchId)
             .orElseThrow { IllegalArgumentException("경기를 찾을 수 없습니다: ${message.matchId}") }
 
-        // 2. 명령어 추출 (data.command가 우선, 없으면 type 사용)
         val data = message.data ?: emptyMap()
         val command = data["command"] as? String ?: message.type
 
-        // 3. 명령(Command)에 따른 분기 처리
-        return when (command) {
-            // [A] 선수 교체 관련 (투수/야수, 대타, 대주자)
+        // handlePlayBall 등이 반환한 문자열(log)을 받아서
+        val resultLog = when (command) {
             "SUBSTITUTION" -> handlePlayerSubstitution(matchInfo, message, data)
             "PINCH_HITTER" -> handlePinchHitter(matchInfo, message, data)
             "PINCH_RUNNER" -> handlePinchRunner(matchInfo, message, data)
-
-            // [B] 주루 작전 (적극적 주루 ON/OFF)
             "BASERUNNING" -> {
                 val isAggressive = data["is_aggressive"] as? Boolean ?: false
-                // ON이면 AGGRESSIVE_RUNNING, OFF면 NORMAL 모드
                 val tactic = if (isAggressive) "AGGRESSIVE_RUNNING" else "NORMAL"
                 handlePlayBall(matchInfo, message, tactic)
             }
-
-            // [C] 기타 작전 (번트, 고의사구, 도루 등)
-            // 프론트에서 { command: 'BUNT' } 등으로 보내면 여기서 처리
             "BUNT", "STEAL", "INTENTIONAL_WALK" -> handlePlayBall(matchInfo, message, command)
-
-            // [D] 일반 진행
             "NORMAL" -> handlePlayBall(matchInfo, message, "NORMAL")
-
             else -> handlePlayBall(matchInfo, message, "NORMAL")
         }
+
+        // ⭐ [핵심] 로그와 함께 '변경된 matchInfo 객체'를 묶어서 반환!
+        return GameActionResult(resultLog, matchInfo)
     }
 
     // ==================================================================
@@ -335,5 +326,8 @@ class GamePlayService(
     }
 }
 
-
+data class GameActionResult(
+    val message: String,
+    val matchInfo: MatchInfo
+)
 

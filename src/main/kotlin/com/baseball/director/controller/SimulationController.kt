@@ -48,25 +48,22 @@ class SimulationController(
     }
 
     private fun convertToFullLineup(lineup: Lineup): FullLineupResponse {
+        // 1. 모든 ID 수집
+        val allBatterIds = (lineup.battingOrder + lineup.bench + lineup.starters.filter { it.key != "P" }.values).distinct()
+        val allPitcherIds = (lineup.bullpen + (lineup.starters["P"] ?: -1L)).filter { it != -1L }.distinct()
+
+        // 2. 한 번의 쿼리로 조회 (findAllById 사용)
+        val batterMap = batterRepository.findAllById(allBatterIds).associateBy { it.id }
+        val pitcherMap = pitcherRepository.findAllById(allPitcherIds).associateBy { it.id }
+
+        // 3. 메모리 매핑 (DB 조회 없음)
         val starters = lineup.starters.mapValues { (pos, id) ->
-            if (pos == "P") {
-                pitcherRepository.findById(id).orElse(null)
-            } else {
-                batterRepository.findById(id).orElse(null)
-            }
+            if (pos == "P") pitcherMap[id] else batterMap[id]
         }
 
-        val battingOrder = lineup.battingOrder.map { id ->
-            batterRepository.findById(id).orElse(null)
-        }
-
-        val bench = lineup.bench.map { id ->
-            batterRepository.findById(id).orElse(null)
-        }
-
-        val bullpen = lineup.bullpen.map { id ->
-            pitcherRepository.findById(id).orElse(null)
-        }
+        val battingOrder = lineup.battingOrder.map { batterMap[it] }
+        val bench = lineup.bench.map { batterMap[it] }
+        val bullpen = lineup.bullpen.map { pitcherMap[it] }
 
         return FullLineupResponse(
             starters = starters,

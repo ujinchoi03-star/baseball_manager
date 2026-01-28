@@ -1,7 +1,7 @@
 package com.baseball.director.global.websocket
 
 import com.baseball.director.service.GamePlayService
-import com.baseball.director.service.GameSetupService  // ⭐ 추가
+import com.baseball.director.service.GameSetupService
 import org.springframework.messaging.handler.annotation.*
 import org.springframework.messaging.simp.SimpMessageSendingOperations
 import org.springframework.stereotype.Controller
@@ -9,11 +9,12 @@ import org.springframework.stereotype.Controller
 @Controller
 class GameHandler(
     private val gamePlayService: GamePlayService,
-    private val gameSetupService: GameSetupService,  // ⭐ 추가
+    private val gameSetupService: GameSetupService,
+    // matchInfoRepository는 Service가 데이터를 가져오므로 여기선 제거해도 됩니다!
     private val messagingTemplate: SimpMessageSendingOperations
 ) {
 
-    // 기존 게임 액션 (타격 등)
+    // [메인] 게임 진행 (타격, 작전, 교체 등)
     @MessageMapping("/match/{matchId}/command")
     @SendTo("/topic/match/{matchId}")
     fun handleGameAction(
@@ -24,20 +25,31 @@ class GameHandler(
         println("📨 [${matchId}] 받은 메시지: type=${message.type}, sender=${message.senderId}")
 
         return try {
-            val resultMessage = gamePlayService.handleAction(message)
+            // 1. Service 호출 (결과 메시지와 변경된 MatchInfo를 한 번에 받음)
+            // 주의: GamePlayService가 GameActionResult를 반환하도록 수정되어 있어야 합니다.
+            val actionResult = gamePlayService.handleAction(message)
+            val resultMessage = actionResult.message
+            val updatedMatchInfo = actionResult.matchInfo
 
+            // 2. 이벤트 타입 결정
             val eventType = when {
                 resultMessage.contains("공수교대") -> "GAME_EVENT"
-                resultMessage.contains("경기 종료") -> "GAME_EVENT"
+                resultMessage.contains("경기 종료") -> "GAME_OVER"
+                message.type == "MANAGEMENT" -> "GAME_EVENT" // 교체/작전 로그용
                 else -> "AT_BAT_RESULT"
             }
 
+            // 3. 응답 생성 (프론트 개발자의 Map 변환 로직 적용!)
             GameResponse(
                 eventType = eventType,
                 matchId = matchId,
-                inning = message.inning ?: 1,
+                inning = updatedMatchInfo.inning,
                 description = resultMessage,
-                data = mapOf("success" to true),
+                data = mapOf(
+                    "success" to true,
+                    // ⭐ 엔티티 대신 안전하게 변환된 Map을 보냅니다.
+                    "matchInfo" to buildMatchInfoMap(updatedMatchInfo)
+                ),
                 timestamp = System.currentTimeMillis()
             )
 
@@ -56,7 +68,7 @@ class GameHandler(
         }
     }
 
-    // ⭐ 새로 추가: 게임 설정 메시지 (라인업 확정, 구장 선택 등)
+    // [설정] 게임 시작 전 설정 (라인업, 준비 완료)
     @MessageMapping("/match/{matchId}/setup")
     @SendTo("/topic/match/{matchId}")
     fun handleGameSetup(
@@ -89,16 +101,15 @@ class GameHandler(
                 "CHECK_READY" -> {
                     val result = gameSetupService.checkReady(matchId)
 
+                    // ⭐ [중요] 성능 이슈 방지: 전체 result를 보내지 않고 ready 값만 보냅니다.
+                    val isReady = result["ready"] as? Boolean ?: false
+
                     GameResponse(
                         eventType = "READY_STATUS",
                         matchId = matchId,
                         inning = 0,
-                        description = if (result["ready"] as Boolean) {
-                            "게임 시작 준비 완료!"
-                        } else {
-                            "설정 진행 중..."
-                        },
-                        data = result,
+                        description = if (isReady) "게임 시작 준비 완료!" else "설정 진행 중...",
+                        data = mapOf("ready" to isReady), // 가볍게 전송
                         timestamp = System.currentTimeMillis()
                     )
                 }
@@ -121,5 +132,35 @@ class GameHandler(
                 timestamp = System.currentTimeMillis()
             )
         }
+    }
+
+    // ⭐ 프론트엔드 개발자분이 만든 Helper 함수 (Entity -> Map 변환)
+    // 이 방식이 JSON 변환 오류도 막고 데이터도 깔끔해서 아주 좋습니다.
+    private fun buildMatchInfoMap(matchInfo: com.baseball.director.domain.entity.MatchInfo?): Map<String, Any?> {
+        if (matchInfo == null) return emptyMap()
+
+        val isTop = matchInfo.isTop
+        val defenseLineup = if (isTop) matchInfo.homeLineup else matchInfo.awayLineup
+
+        return mapOf(
+            "matchId" to matchInfo.matchId,
+            "inning" to matchInfo.inning,
+            "isTop" to matchInfo.isTop,
+            "status" to matchInfo.status,
+            "score" to mapOf(
+                "home" to matchInfo.score.home,
+                "away" to matchInfo.score.away
+            ),
+            "ballCount" to mapOf(
+                "b" to matchInfo.ballCount.b,
+                "s" to matchInfo.ballCount.s,
+                "o" to matchInfo.ballCount.o
+            ),
+            "runnerIds" to matchInfo.runners.runnerIds,
+            "currentBatterIndex" to matchInfo.currentBatterIndex,
+            "currentPitcherId" to defenseLineup.starters["P"],
+            // 프론트에서 수비 위치 렌더링에 필요한 정보가 있다면 여기에 추가 가능
+            "fieldPositions" to mapOf<String, Long>() // 필요 시 구현
+        )
     }
 }
