@@ -53,7 +53,10 @@ class MatchMakingService(
             )
             roomRepository.save(room)
 
-            matchInfoRepository.save(MatchInfo(matchId = matchId))
+            val matchInfo = MatchInfo(matchId = matchId)
+            matchInfo.homeTeamId = opponent.userId
+            matchInfo.awayTeamId = myUserId
+            matchInfoRepository.save(matchInfo)
 
             matchQueueRepository.deleteById(myUserId)
             matchQueueRepository.deleteById(opponent.userId)

@@ -109,7 +109,11 @@ class GameHandler(
                         matchId = matchId,
                         inning = 0,
                         description = if (isReady) "게임 시작 준비 완료!" else "설정 진행 중...",
-                        data = mapOf("ready" to isReady), // 가볍게 전송
+                        data = mapOf(
+                            "ready" to isReady,
+                            "home_team_id" to (result["home_team_id"] ?: 0L),
+                            "away_team_id" to (result["away_team_id"] ?: 0L)
+                        ),
                         timestamp = System.currentTimeMillis()
                     )
                 }
@@ -159,6 +163,8 @@ class GameHandler(
             "runnerIds" to matchInfo.runners.runnerIds,
             "currentBatterIndex" to matchInfo.currentBatterIndex,
             "currentPitcherId" to defenseLineup.starters["P"],
+            "home_team_id" to matchInfo.homeTeamId,
+            "away_team_id" to matchInfo.awayTeamId,
             // 프론트에서 수비 위치 렌더링에 필요한 정보가 있다면 여기에 추가 가능
             "fieldPositions" to mapOf<String, Long>() // 필요 시 구현
         )
