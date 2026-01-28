@@ -77,21 +77,24 @@ class MatchMakingService(
             matchType = "FRIEND"
         )
         roomRepository.save(room)
-        matchInfoRepository.save(MatchInfo(matchId = matchId)) // ⭐ 추가
 
-        matchInfoRepository.save(MatchInfo(matchId = matchId))
-        println("✅ 친구 초대 방 생성: $matchId, 코드: $inviteCode")
+        // ⭐ MatchInfo 생성 시 Host를 홈팀으로 설정
+        val matchInfo = MatchInfo(matchId = matchId)
+        matchInfo.homeTeamId = userId  // Host = 홈팀
+        matchInfoRepository.save(matchInfo)
+
+        println("✅ 친구 초대 방 생성: $matchId, 코드: $inviteCode, 홈팀: $userId")
 
         return FriendRoomResponse(
             matchId = matchId,
             inviteCode = inviteCode
         )
     }
-
+    // 4. 초대 코드로 입장
     // 4. 초대 코드로 입장
     @Transactional
     fun joinWithInviteCode(userId: Long, inviteCode: String): JoinRoomResponse {
-        // 1. 방 찾기 - Kotlin 네이티브 방식
+        // 1. 방 찾기
         val room = roomRepository.findByInviteCode(inviteCode)
             ?: throw IllegalArgumentException("유효하지 않은 초대 코드입니다")
 
@@ -112,9 +115,14 @@ class MatchMakingService(
         if (matchInfo.awayLineup.starters.isEmpty()) {
             matchInfo.awayLineup = Lineup()
         }
+
+        // ⭐ Guest를 원정팀으로 설정
+        matchInfo.awayTeamId = userId  // Guest = 원정팀
+
         matchInfoRepository.save(matchInfo)
 
         println("✅ 게스트 참가 완료: ${room.matchId}, hostId=${room.hostId}, guestId=${room.guestId}")
+        println("   홈팀(Host): ${matchInfo.homeTeamId}, 원정팀(Guest): ${matchInfo.awayTeamId}")
 
         // 5. WebSocket으로 Host에게 알림 전송
         try {

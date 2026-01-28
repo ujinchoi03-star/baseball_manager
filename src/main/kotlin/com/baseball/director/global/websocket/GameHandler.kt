@@ -1,6 +1,7 @@
 package com.baseball.director.global.websocket
 
 import com.baseball.director.service.GamePlayService
+import com.baseball.director.service.GameSetupService  // ⭐ 추가
 import org.springframework.messaging.handler.annotation.*
 import org.springframework.messaging.simp.SimpMessageSendingOperations
 import org.springframework.stereotype.Controller
@@ -8,12 +9,13 @@ import org.springframework.stereotype.Controller
 @Controller
 class GameHandler(
     private val gamePlayService: GamePlayService,
+    private val gameSetupService: GameSetupService,  // ⭐ 추가
     private val messagingTemplate: SimpMessageSendingOperations
 ) {
 
-    // 클라이언트가 보내는 곳: /app/match/{matchId}/command
+    // 기존 게임 액션 (타격 등)
     @MessageMapping("/match/{matchId}/command")
-    @SendTo("/topic/match/{matchId}") // 구독하는 곳
+    @SendTo("/topic/match/{matchId}")
     fun handleGameAction(
         @DestinationVariable matchId: String,
         @Payload message: GameMessage
@@ -22,22 +24,18 @@ class GameHandler(
         println("📨 [${matchId}] 받은 메시지: type=${message.type}, sender=${message.senderId}")
 
         return try {
-            // 1. 게임 로직 실행
             val resultMessage = gamePlayService.handleAction(message)
 
-            // 2. ⭐ [핵심 수정] 메시지 내용에 따라 이벤트 타입 자동 결정
-            // 명세서의 GAME_EVENT(이닝 교체 등)를 지원하기 위함
             val eventType = when {
                 resultMessage.contains("공수교대") -> "GAME_EVENT"
                 resultMessage.contains("경기 종료") -> "GAME_EVENT"
-                else -> "AT_BAT_RESULT" // 일반적인 안타/아웃
+                else -> "AT_BAT_RESULT"
             }
 
-            // 3. 응답 생성
             GameResponse(
-                eventType = eventType,  // ⭐ 동적으로 바뀐 타입 넣어주기
+                eventType = eventType,
                 matchId = matchId,
-                inning = message.inning ?: 1, // 필요하다면 서비스에서 현재 이닝을 리턴받도록 개선 가능
+                inning = message.inning ?: 1,
                 description = resultMessage,
                 data = mapOf("success" to true),
                 timestamp = System.currentTimeMillis()
@@ -47,7 +45,6 @@ class GameHandler(
             println("❌ [${matchId}] 에러 발생: ${e.message}")
             e.printStackTrace()
 
-            // 에러 발생 시 명세서대로 ERROR 타입 전송
             GameResponse(
                 eventType = "ERROR",
                 matchId = matchId,
@@ -59,8 +56,70 @@ class GameHandler(
         }
     }
 
-    // 서버에서 강제로 메시지를 보낼 때 쓰는 함수 (필요 시 사용)
- //   fun broadcastToMatch(matchId: String, response: GameResponse) {
-   //     messagingTemplate.convertAndSend("/topic/match/$matchId", response)
-    //}
+    // ⭐ 새로 추가: 게임 설정 메시지 (라인업 확정, 구장 선택 등)
+    @MessageMapping("/match/{matchId}/setup")
+    @SendTo("/topic/match/{matchId}")
+    fun handleGameSetup(
+        @DestinationVariable matchId: String,
+        @Payload message: GameMessage
+    ): GameResponse {
+
+        println("🎮 [${matchId}] 설정 메시지: type=${message.type}, sender=${message.senderId}")
+
+        return try {
+            when (message.type) {
+                "LINEUP_CONFIRM" -> {
+                    val userId = message.senderId
+                    val result = gameSetupService.confirmLineup(matchId, userId)
+
+                    GameResponse(
+                        eventType = "LINEUP_STATUS",
+                        matchId = matchId,
+                        inning = 0,
+                        description = if (result["both_confirmed"] as Boolean) {
+                            "양쪽 라인업 확정 완료!"
+                        } else {
+                            "상대방 라인업 대기 중..."
+                        },
+                        data = result,
+                        timestamp = System.currentTimeMillis()
+                    )
+                }
+
+                "CHECK_READY" -> {
+                    val result = gameSetupService.checkReady(matchId)
+
+                    GameResponse(
+                        eventType = "READY_STATUS",
+                        matchId = matchId,
+                        inning = 0,
+                        description = if (result["ready"] as Boolean) {
+                            "게임 시작 준비 완료!"
+                        } else {
+                            "설정 진행 중..."
+                        },
+                        data = result,
+                        timestamp = System.currentTimeMillis()
+                    )
+                }
+
+                else -> {
+                    throw IllegalArgumentException("알 수 없는 설정 타입: ${message.type}")
+                }
+            }
+
+        } catch (e: Exception) {
+            println("❌ [${matchId}] 설정 에러: ${e.message}")
+            e.printStackTrace()
+
+            GameResponse(
+                eventType = "ERROR",
+                matchId = matchId,
+                inning = 0,
+                description = "설정 오류: ${e.message}",
+                data = mapOf("error" to (e.message ?: "알 수 없는 오류")),
+                timestamp = System.currentTimeMillis()
+            )
+        }
+    }
 }
