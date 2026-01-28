@@ -38,7 +38,9 @@ class GameSetupService(
         return mapOf(
             "home_confirmed" to matchInfo.homeLineupConfirmed,
             "away_confirmed" to matchInfo.awayLineupConfirmed,
-            "both_confirmed" to bothConfirmed
+            "both_confirmed" to bothConfirmed,
+            "home_team_id" to (matchInfo.homeTeamId ?: 0L),  // ⭐ 추가
+            "away_team_id" to (matchInfo.awayTeamId ?: 0L)   // ⭐ 추가
         )
     }
 
@@ -48,19 +50,16 @@ class GameSetupService(
         val matchInfo = matchInfoRepository.findById(matchId).orElse(null)
             ?: throw IllegalArgumentException("매치를 찾을 수 없습니다")
 
+        // 라인업 확정만 체크 (homeTeamId, awayTeamId는 이미 자동 설정됨)
         val ready = matchInfo.homeLineupConfirmed &&
-                matchInfo.awayLineupConfirmed &&
-                matchInfo.stadium != null &&
-                matchInfo.homeTeamId != null &&
-                matchInfo.awayTeamId != null
+                matchInfo.awayLineupConfirmed
 
         return mapOf(
             "ready" to ready,
             "home_confirmed" to matchInfo.homeLineupConfirmed,
             "away_confirmed" to matchInfo.awayLineupConfirmed,
-            "stadium" to (matchInfo.stadium ?: ""),
-            "home_team_id" to (matchInfo.homeTeamId ?: 0),
-            "away_team_id" to (matchInfo.awayTeamId ?: 0)
+            "home_team_id" to (matchInfo.homeTeamId ?: 0L),
+            "away_team_id" to (matchInfo.awayTeamId ?: 0L)
         )
     }
 }
