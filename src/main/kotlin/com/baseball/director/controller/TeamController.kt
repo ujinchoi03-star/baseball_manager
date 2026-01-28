@@ -23,7 +23,8 @@ class TeamController(
             battingOrder = request.active_lineup.batting_order.toMutableList(),
             starters = request.active_lineup.starters.toMutableMap(),
             bench = request.active_lineup.bench?.toMutableList() ?: mutableListOf(),
-            bullpen = request.active_lineup.bullpen?.toMutableList() ?: mutableListOf()
+            bullpen = request.active_lineup.bullpen?.toMutableList() ?: mutableListOf(),
+            hasDH = request.active_lineup.has_dh ?: true
         )
 
         return try {
@@ -43,7 +44,8 @@ class TeamController(
             battingOrder = request.active_lineup.batting_order.toMutableList(),
             starters = request.active_lineup.starters.toMutableMap(),
             bench = request.active_lineup.bench?.toMutableList() ?: mutableListOf(),
-            bullpen = request.active_lineup.bullpen?.toMutableList() ?: mutableListOf()
+            bullpen = request.active_lineup.bullpen?.toMutableList() ?: mutableListOf(),
+            hasDH = request.active_lineup.has_dh ?: true
         )
 
         // 현재 구성된 라인업의 총 급여 계산
@@ -75,7 +77,8 @@ data class ActiveLineup(
     val starters: Map<String, Long>,
     val batting_order: List<Long>,
     val bench: List<Long>? = null,
-    val bullpen: List<Long>? = null
+    val bullpen: List<Long>? = null,
+    val has_dh: Boolean? = true
 )
 
 data class MatchSetupRequest(
