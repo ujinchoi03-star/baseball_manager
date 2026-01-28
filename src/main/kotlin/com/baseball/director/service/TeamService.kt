@@ -19,7 +19,7 @@ class TeamService(
 
     // ⭐ 급여 한도 상수 설정
     companion object {
-        const val MAX_CREDIT_LIMIT = 200
+        const val MAX_CREDIT_LIMIT = 220
     }
 
     @Transactional(readOnly = true)
