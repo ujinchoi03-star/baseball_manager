@@ -30,7 +30,7 @@ class SimulationController(
 
         // 2. 응답 데이터 구성
         val response = GameInitResponse(
-            match_id = matchInfo.matchId, // 👈 [수정] id -> matchId 로 변경! (!!도 필요 없음)
+            match_id = matchInfo.matchId,
             inning = matchInfo.inning,
             is_top = matchInfo.isTop,
             score = matchInfo.score,
@@ -39,7 +39,9 @@ class SimulationController(
             ball_count = matchInfo.ballCount,
             runners = matchInfo.runners.runnerIds.map { id ->
                 id?.let { batterRepository.findById(it).orElse(null) }
-            }
+            },
+            home_team_id = matchInfo.homeTeamId,  // ⭐ 추가
+            away_team_id = matchInfo.awayTeamId   // ⭐ 추가
         )
 
         return ResponseEntity.ok(response)
@@ -85,7 +87,9 @@ data class GameInitResponse(
     val home_lineup: FullLineupResponse,
     val away_lineup: FullLineupResponse,
     val ball_count: com.baseball.director.domain.entity.BallCount,
-    val runners: List<Batter?>
+    val runners: List<Batter?>,
+    val home_team_id: Long?,  // ⭐ 추가
+    val away_team_id: Long?   // ⭐ 추가
 )
 
 data class FullLineupResponse(
